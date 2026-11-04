@@ -1,0 +1,28 @@
+# Throwaway MySQL 8 for the Report Generator benchmark dataset.
+# Usage: see benchmarks/README.md
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: rg-bench-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: bench
+      MYSQL_DATABASE: rg_bench
+    command:
+      - --innodb-buffer-pool-size=${RG_BENCH_BUFFER_POOL:-2G}
+      - --innodb-log-file-size=512M
+      - --innodb-flush-log-at-trx-commit=2
+      - --max-allowed-packet=256M
+    ports:
+      - "${RG_BENCH_PORT:-33061}:3306"
+    volumes:
+      - rg-bench-data:/var/lib/mysql
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      # TCP ping: the temporary server used during init only listens on a socket,
+      # so this turns healthy once schema.sql has run and the real server is up.
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-pbench"]
+      interval: 5s
+      retries: 30
+
+volumes:
+  rg-bench-data:
