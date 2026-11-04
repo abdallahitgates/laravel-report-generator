@@ -6,9 +6,9 @@ filters, grouping, formulas, exports) without writing SQL. Built for large
 datasets: work is pushed down to the database, previews are paged on the
 server, and exports stream with constant memory.
 
-The UI ships separately as [`@abdalla/report-generator-vue`](../report-generator-vue).
+The UI ships separately as [`@abdalla/report-generator-vue`](https://github.com/abdallahitgates/report-generator-vue).
 
-> Status: **M3 (report builder)**. Scanning, Model Studio, the query engine,
+> Version **0.1.0**, milestone M3 (report builder). Scanning, Model Studio, the query engine,
 > saved reports and the builder UI are in place. Exports (M4) and report
 > sources (M5) follow.
 
@@ -20,12 +20,25 @@ schema); other Laravel drivers work through a slower generic inspector.
 
 ## Install
 
+The package is installed from its GitHub repository. Add the repository to
+your project's `composer.json` once:
+
+```json
+"repositories": [
+    { "type": "vcs", "url": "https://github.com/abdallahitgates/laravel-report-generator" }
+]
+```
+
+then:
+
 ```bash
-composer require abdalla/laravel-report-generator
+composer require abdalla/laravel-report-generator:^0.1
 php artisan report-generator:install --migrate
 ```
 
-In a monorepo, use a path repository (see `laravel/composer.json` in ProCRM).
+While the repository is private, give Composer a read-only GitHub token once
+per machine: `composer config --global github-oauth.github.com <token>`
+(on servers and CI, use the `COMPOSER_AUTH` environment variable instead).
 
 ## Configure
 
@@ -261,3 +274,13 @@ vendor/bin/pest
 Laravel 10, PHP 8.2 + Laravel 11 and PHP 8.3 + Laravel 12, each against
 SQLite, MySQL 8 and PostgreSQL 16. A synthetic large dataset for performance
 work lives in [`benchmarks/`](benchmarks).
+
+## Releasing
+
+```bash
+git tag v0.2.0
+git push origin main --tags
+```
+
+Projects pick up the new version with `composer update abdalla/laravel-report-generator`
+(within their constraint, e.g. `^0.1` stays on 0.1.x; change it to `^0.2` to move).

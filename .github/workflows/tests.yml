@@ -1,0 +1,61 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    name: PHP ${{ matrix.php }}, Laravel ${{ matrix.laravel }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { php: "8.1", laravel: "10", testbench: "^8.0", pest: "^2.34" }
+          - { php: "8.2", laravel: "11", testbench: "^9.0", pest: "^3.0" }
+          - { php: "8.3", laravel: "12", testbench: "^10.0", pest: "^3.0" }
+    # The schema inspectors and the query engine are tested on real MySQL and PostgreSQL too.
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: rg_test
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: rg_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      RG_TEST_MYSQL_HOST: 127.0.0.1
+      RG_TEST_MYSQL_PORT: 3306
+      RG_TEST_MYSQL_PASSWORD: root
+      RG_TEST_PGSQL_HOST: 127.0.0.1
+      RG_TEST_PGSQL_PORT: 5432
+      RG_TEST_PGSQL_PASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_sqlite, pdo_mysql, pdo_pgsql
+          coverage: none
+
+      - name: Install dependencies for Laravel ${{ matrix.laravel }}
+        run: |
+          composer require --dev "orchestra/testbench:${{ matrix.testbench }}" "pestphp/pest:${{ matrix.pest }}" --no-update --no-interaction
+          composer update --prefer-dist --no-interaction --no-progress -W
+
+      - name: Run tests
+        run: vendor/bin/pest tests/Unit tests/Feature

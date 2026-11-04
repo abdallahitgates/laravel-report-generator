@@ -17,7 +17,7 @@ use Abdalla\ReportGenerator\Sources\SourceRegistry;
  */
 class ReportGenerator
 {
-    public const VERSION = '0.1.0-dev';
+    public const VERSION = '0.1.0';
 
     /** @var (Closure(?Authenticatable, string, array): bool)|null */
     private ?Closure $authorizer = null;
