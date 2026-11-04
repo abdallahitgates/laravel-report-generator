@@ -7,9 +7,10 @@ return [
     | Connections
     |--------------------------------------------------------------------------
     |
-    | `data_connection` is the database reports read from. Point it at a read
-    | replica (or a read-only DB user) in production so heavy reports never
-    | compete with the application. `metadata_connection` holds the package's
+    | `data_connection` is the database reports read from. In production use
+    | a read replica if you have one; otherwise define a second connection to
+    | the same database with a read-only user (GRANT SELECT only), so a report
+    | can never write, and point this at it. `metadata_connection` holds the package's
     | own rg_* tables (saved reports, runs, semantic model). Null means the
     | application's default connection.
     |
@@ -93,7 +94,9 @@ return [
     |
     | Tables matching `excluded_tables` are never offered as datasets.
     | Columns matching `sensitive_columns` are hidden and flagged; only an
-    | admin can expose them explicitly. Patterns use Str::is() wildcards.
+    | admin can expose them explicitly. Patterns use Str::is() wildcards and
+    | are matched case-insensitively. The package's own tables are always
+    | excluded.
     |
     */
 
@@ -107,10 +110,19 @@ return [
             '*password*', '*token*', '*secret*', 'remember_*', '*api_key*', '*private_key*',
             'two_factor_*',
         ],
-        // Where to look for Eloquent models when inferring relationships.
-        'model_paths' => [
-            'app/Models',
-            'app',
+        // PostgreSQL schema to scan. Null = first entry of the connection's
+        // search_path, else "public".
+        'pgsql_schema' => env('RG_PGSQL_SCHEMA'),
+
+        // Read belongsTo / hasOne / hasMany definitions from Eloquent models
+        // to find relationships the database has no foreign keys for.
+        // Paths are relative to base_path(); the value says whether to recurse.
+        'eloquent' => [
+            'enabled' => true,
+            'paths' => [
+                'app/Models' => true,
+                'app' => false,
+            ],
         ],
     ],
 

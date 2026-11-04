@@ -26,5 +26,34 @@ abstract class TestCase extends Orchestra
             'prefix' => '',
             'foreign_key_constraints' => true,
         ]);
+
+        // Optional real databases for driver-specific tests (see README / CI).
+        if (env('RG_TEST_MYSQL_HOST')) {
+            $app['config']->set('database.connections.mysql_test', [
+                'driver' => 'mysql',
+                'host' => env('RG_TEST_MYSQL_HOST'),
+                'port' => env('RG_TEST_MYSQL_PORT', 3306),
+                'database' => env('RG_TEST_MYSQL_DATABASE', 'rg_test'),
+                'username' => env('RG_TEST_MYSQL_USERNAME', 'root'),
+                'password' => env('RG_TEST_MYSQL_PASSWORD', ''),
+                'charset' => 'utf8mb4',
+                'collation' => 'utf8mb4_unicode_ci',
+                'prefix' => '',
+            ]);
+        }
+
+        if (env('RG_TEST_PGSQL_HOST')) {
+            $app['config']->set('database.connections.pgsql_test', [
+                'driver' => 'pgsql',
+                'host' => env('RG_TEST_PGSQL_HOST'),
+                'port' => env('RG_TEST_PGSQL_PORT', 5432),
+                'database' => env('RG_TEST_PGSQL_DATABASE', 'rg_test'),
+                'username' => env('RG_TEST_PGSQL_USERNAME', 'postgres'),
+                'password' => env('RG_TEST_PGSQL_PASSWORD', ''),
+                'charset' => 'utf8',
+                'prefix' => '',
+                'search_path' => 'public',
+            ]);
+        }
     }
 }

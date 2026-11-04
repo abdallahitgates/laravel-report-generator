@@ -18,4 +18,15 @@ enum Ability: string
     {
         return lcfirst($this->name);
     }
+
+    public static function fromKey(string $key): self
+    {
+        foreach (self::cases() as $case) {
+            if ($case->key() === $key || $case->value === $key) {
+                return $case;
+            }
+        }
+
+        throw new \InvalidArgumentException("Unknown report generator ability [{$key}].");
+    }
 }

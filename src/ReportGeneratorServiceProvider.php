@@ -5,6 +5,9 @@ namespace Abdalla\ReportGenerator;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Abdalla\ReportGenerator\Console\InstallCommand;
+use Abdalla\ReportGenerator\Console\PublishCommand;
+use Abdalla\ReportGenerator\Console\ScanCommand;
+use Abdalla\ReportGenerator\Http\Middleware\Authorize;
 use Abdalla\ReportGenerator\Security\PolicyRegistry;
 use Abdalla\ReportGenerator\Sources\SourceRegistry;
 
@@ -21,6 +24,7 @@ class ReportGeneratorServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->app['router']->aliasMiddleware('report-generator.can', Authorize::class);
         $this->registerRoutes();
 
         if (config('report-generator.run_migrations', true)) {
@@ -38,6 +42,8 @@ class ReportGeneratorServiceProvider extends ServiceProvider
 
             $this->commands([
                 InstallCommand::class,
+                ScanCommand::class,
+                PublishCommand::class,
             ]);
         }
     }

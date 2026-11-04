@@ -32,6 +32,7 @@ class InstallCommand extends Command
             'Grant abilities with Gate::define(\'report-generator.model.manage\', ...) and friends.',
             'Register row policies and report sources with the ReportGenerator facade in a service provider.',
             $this->option('migrate') ? 'Tables are ready.' : 'Run php artisan migrate to create the rg_* tables.',
+            'Run php artisan report-generator:scan, review the result in Model Studio, then publish it.',
         ]);
 
         return self::SUCCESS;
