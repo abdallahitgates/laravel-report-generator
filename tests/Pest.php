@@ -2,7 +2,7 @@
 
 use Abdalla\ReportGenerator\Tests\TestCase;
 
-uses(TestCase::class)->in('Feature', 'Unit');
+uses(TestCase::class)->in('Feature', 'Unit', 'Benchmark');
 
 /**
  * Data connections the driver-specific tests run against. SQLite always;

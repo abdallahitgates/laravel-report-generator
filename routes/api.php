@@ -2,6 +2,7 @@
 
 use Abdalla\ReportGenerator\Http\Controllers\MetaController;
 use Abdalla\ReportGenerator\Http\Controllers\Model;
+use Abdalla\ReportGenerator\Http\Controllers\Query\QueryController;
 use Illuminate\Support\Facades\Route;
 
 // Prefix, middleware and the "report-generator." name prefix come from
@@ -28,4 +29,13 @@ Route::prefix('model')->name('model.')->middleware('report-generator.can:manageM
 
     Route::get('versions', [Model\VersionController::class, 'index'])->name('versions.index');
     Route::post('publish', [Model\VersionController::class, 'store'])->name('publish');
+});
+
+// Building and running reports.
+Route::middleware('report-generator.can:createReports')->group(function () {
+    Route::get('catalog', [QueryController::class, 'catalog'])->name('catalog');
+    Route::post('query/validate', [QueryController::class, 'validateDefinition'])->name('query.validate');
+    Route::post('query/rows', [QueryController::class, 'rows'])->name('query.rows');
+    Route::post('query/values', [QueryController::class, 'values'])->name('query.values');
+    Route::post('query/{queryId}/cancel', [QueryController::class, 'cancel'])->name('query.cancel');
 });

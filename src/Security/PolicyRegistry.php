@@ -28,9 +28,32 @@ final class PolicyRegistry
         $this->policies[$dataset][] = $policy;
     }
 
+    /** @var array<string, true> */
+    private array $unrestricted = [];
+
     public function has(string $dataset): bool
     {
         return ! empty($this->policies[$dataset]);
+    }
+
+    /** @param  list<string>  $datasets */
+    public function markUnrestricted(array $datasets): void
+    {
+        foreach ($datasets as $dataset) {
+            $this->unrestricted[$dataset] = true;
+        }
+    }
+
+    public function isUnrestricted(string $dataset): bool
+    {
+        return isset($this->unrestricted[$dataset])
+            || in_array($dataset, (array) config('report-generator.security.unrestricted_datasets', []), true);
+    }
+
+    /** Fingerprint of what is registered, so cached results never cross a policy change. */
+    public function fingerprint(): string
+    {
+        return md5(json_encode([array_map('count', $this->policies), array_keys($this->unrestricted)]));
     }
 
     /** @return list<string> */

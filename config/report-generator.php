@@ -60,24 +60,50 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Row security
+    |--------------------------------------------------------------------------
+    |
+    | Deny by default: a user without the report-generator.report.view-all
+    | ability can only query datasets that have a row policy
+    | (ReportGenerator::policy) or are listed as unrestricted here or with
+    | ReportGenerator::unrestricted() (lookup tables such as products).
+    | A forgotten policy therefore hides data instead of leaking it.
+    |
+    */
+
+    'security' => [
+        'require_row_policies' => true,
+        'unrestricted_datasets' => [],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Execution limits
     |--------------------------------------------------------------------------
     */
 
     'limits' => [
         'preview_page_size' => 200,
+        'max_page_size' => 5_000,
         'preview_timeout_ms' => 15_000,
         'export_timeout_ms' => 900_000,
         'max_concurrent_per_user' => 2,
         'max_concurrent_global' => 10,
-        // EXPLAIN row estimate above which a query must run as a background job.
+        // Run EXPLAIN before a preview to report how many rows it will read.
+        'explain' => true,
+        // Refuse previews whose EXPLAIN estimate reads more rows than this (null = never refuse).
+        'refuse_above_est_rows' => null,
+        // EXPLAIN row estimate above which a query must run as a background job (exports, M4).
         'async_above_est_rows' => 2_000_000,
     ],
 
     'cache' => [
+        // Any Laravel cache store; it also holds the concurrency locks, so it must support locks.
         'store' => env('RG_CACHE_STORE'),
         'ttl' => 600,
     ],
+
+    'query_log' => true,
 
     'exports' => [
         'disk' => env('RG_EXPORT_DISK', 'local'),

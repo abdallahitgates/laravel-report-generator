@@ -41,6 +41,20 @@ class ReportGenerator
         return $this;
     }
 
+    /**
+     * Datasets anyone allowed to build reports may read in full, such as
+     * lookup tables (products, lines). Everything else needs a row policy
+     * unless the user has the view-all ability.
+     *
+     * @param  list<string>  $datasets
+     */
+    public function unrestricted(array $datasets): static
+    {
+        $this->policies->markUnrestricted($datasets);
+
+        return $this;
+    }
+
     /** @param  class-string<ReportSource>|ReportSource  $source */
     public function source(string|ReportSource $source): static
     {

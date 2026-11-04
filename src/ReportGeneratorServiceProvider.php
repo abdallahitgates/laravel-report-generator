@@ -20,6 +20,7 @@ class ReportGeneratorServiceProvider extends ServiceProvider
         $this->app->singleton(PolicyRegistry::class);
         $this->app->singleton(SourceRegistry::class);
         $this->app->singleton(ReportGenerator::class);
+        $this->app->singleton(\Abdalla\ReportGenerator\Semantic\Published\SemanticModelRepository::class);
     }
 
     public function boot(): void

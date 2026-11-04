@@ -42,6 +42,20 @@ abstract class TestCase extends Orchestra
             ]);
         }
 
+        if (env('RG_BENCH_MYSQL_HOST')) {
+            $app['config']->set('database.connections.mysql_bench', [
+                'driver' => 'mysql',
+                'host' => env('RG_BENCH_MYSQL_HOST'),
+                'port' => env('RG_BENCH_MYSQL_PORT', 33061),
+                'database' => env('RG_BENCH_MYSQL_DATABASE', 'rg_bench'),
+                'username' => env('RG_BENCH_MYSQL_USERNAME', 'root'),
+                'password' => env('RG_BENCH_MYSQL_PASSWORD', 'bench'),
+                'charset' => 'utf8mb4',
+                'collation' => 'utf8mb4_unicode_ci',
+                'prefix' => '',
+            ]);
+        }
+
         if (env('RG_TEST_PGSQL_HOST')) {
             $app['config']->set('database.connections.pgsql_test', [
                 'driver' => 'pgsql',
