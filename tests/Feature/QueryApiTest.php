@@ -101,3 +101,43 @@ it('cancels only your own queries', function () {
         ->assertOk()
         ->assertJsonPath('cancelled', false);
 });
+
+it('accepts definitions exactly as the builder UI sends them', function () {
+    EngineFixture::create('testing');
+    EngineFixture::publish('testing');
+    \Carbon\Carbon::setTestNow('2026-03-10 09:00:00');
+
+    // Shape produced by toDefinition() in the Vue package.
+    $definition = [
+        'version' => 1,
+        'root' => 'visits',
+        'fields' => [
+            ['ref' => 'specialities.name', 'as' => 'specialities_name', 'label' => 'Specialities Name'],
+            ['ref' => 'visits.visit_date', 'as' => 'visit_date', 'label' => 'Visit Date', 'grain' => 'month'],
+            ['ref' => 'visits.__rows', 'as' => 'number_of_visits', 'label' => 'Number of Visits', 'agg' => 'count'],
+            ['formula' => 'number_of_visits * 2', 'as' => 'double', 'label' => 'Double'],
+        ],
+        'sort' => [],
+        'subtotals' => false,
+        'ui' => ['grouped' => true, 'rows' => ['specialities_name', 'visit_date']],
+        'filters' => ['and' => [['field' => 'visits.visit_date', 'op' => 'between', 'value' => 'this_quarter']]],
+    ];
+
+    $top = $this->actingAs(new GenericUser(['id' => 1]))
+        ->postJson('/api/report-generator/query/rows', [
+            'definition' => $definition,
+            'page' => ['offset' => 0, 'size' => 200],
+            'groups' => ['columns' => ['specialities_name', 'visit_date'], 'keys' => []],
+            'query_id' => 'b1f0c2d4-1111-4222-8333-944455556666',
+        ])->assertOk();
+
+    expect(array_column($top->json('columns'), 'alias'))->toBe(['specialities_name', 'number_of_visits', 'double'])
+        ->and(array_column($top->json('rows'), 'number_of_visits'))->toBe([6, 2])
+        ->and($top->json('columns.0.label'))->toBe('Specialities Name');
+
+    $this->postJson('/api/report-generator/reports', ['name' => 'From the UI', 'definition' => $definition])
+        ->assertCreated()
+        ->assertJsonPath('data.definition.ui.grouped', true);
+
+    \Carbon\Carbon::setTestNow();
+});

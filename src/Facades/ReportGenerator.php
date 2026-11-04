@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static \Abdalla\ReportGenerator\ReportGenerator unrestricted(array $datasets)
  * @method static \Abdalla\ReportGenerator\ReportGenerator source(string|\Abdalla\ReportGenerator\Contracts\ReportSource $source)
  * @method static \Abdalla\ReportGenerator\ReportGenerator authorizeUsing(\Closure $callback)
+ * @method static \Abdalla\ReportGenerator\ReportGenerator rolesUsing(\Closure $callback)
  * @method static bool allows(?\Illuminate\Contracts\Auth\Authenticatable $user, \Abdalla\ReportGenerator\Enums\Ability|string $ability, array $arguments = [])
  * @method static \Abdalla\ReportGenerator\Security\PolicyRegistry policies()
  * @method static \Abdalla\ReportGenerator\Sources\SourceRegistry sources()

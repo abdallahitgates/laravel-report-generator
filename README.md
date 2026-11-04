@@ -8,8 +8,8 @@ server, and exports stream with constant memory.
 
 The UI ships separately as [`@abdalla/report-generator-vue`](../report-generator-vue).
 
-> Status: **M2 (query engine)**. Scanning, Model Studio, publishing and the
-> query engine are in place. The builder UI (M3), exports (M4) and report
+> Status: **M3 (report builder)**. Scanning, Model Studio, the query engine,
+> saved reports and the builder UI are in place. Exports (M4) and report
 > sources (M5) follow.
 
 ## Requirements
@@ -225,6 +225,17 @@ All paths are under the configured prefix (default `api/report-generator`).
 | POST | `/query/rows` | create reports | One page of results (`definition`, `parameters`, `page`, `groups`, `query_id`) |
 | POST | `/query/values` | create reports | Distinct values of a field for filter pickers (`field`, `search`) |
 | POST | `/query/{id}/cancel` | create reports | Stop your own running query |
+
+| GET | `/reports` | create reports | Library: `scope` (all, mine, shared), `search`, `folder` |
+| POST | `/reports` | create reports | Save a report (`name`, `description`, `folder`, `visibility`, `definition`) |
+| GET / PATCH / DELETE | `/reports/{uuid}` | owner, or shared | Open / change (owner or edit share) / delete (owner) |
+| POST | `/reports/{uuid}/duplicate` | anyone who can open it | Private copy for the caller |
+| PUT | `/reports/{uuid}/shares` | owner | Replace shares: `[{type: user\|role, id, permission: view\|edit}]` and `visibility` |
+
+A report is saved only if it compiles for the person saving it. Whoever
+opens a shared report sees only the rows their own policies allow. Roles for
+sharing come from `getRoleNames()` (spatie/laravel-permission) or
+`ReportGenerator::rolesUsing(fn ($user) => [...])`.
 
 Errors in a definition return 422 with a stable `code` (`UNKNOWN_FIELD`,
 `AMBIGUOUS_PATH`, `FAN_TRAP`, `TIMEOUT`, ...), a `path` into the definition

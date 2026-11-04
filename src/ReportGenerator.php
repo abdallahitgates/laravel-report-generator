@@ -22,6 +22,9 @@ class ReportGenerator
     /** @var (Closure(?Authenticatable, string, array): bool)|null */
     private ?Closure $authorizer = null;
 
+    /** @var (Closure(Authenticatable): iterable<string>)|null */
+    private ?Closure $roles = null;
+
     public function __construct(
         private readonly PolicyRegistry $policies,
         private readonly SourceRegistry $sources,
@@ -73,6 +76,36 @@ class ReportGenerator
         $this->authorizer = $callback;
 
         return $this;
+    }
+
+    /**
+     * How to read a user's role names, for sharing reports with roles.
+     * Defaults to getRoleNames() (spatie/laravel-permission) when present.
+     *
+     * @param  Closure(Authenticatable): iterable<string>  $callback
+     */
+    public function rolesUsing(Closure $callback): static
+    {
+        $this->roles = $callback;
+
+        return $this;
+    }
+
+    /** @return list<string> */
+    public function rolesOf(?Authenticatable $user): array
+    {
+        if ($user === null) {
+            return [];
+        }
+        if ($this->roles !== null) {
+            $roles = ($this->roles)($user);
+        } elseif (method_exists($user, 'getRoleNames')) {
+            $roles = $user->getRoleNames();
+        } else {
+            return [];
+        }
+
+        return array_values(array_map('strval', is_array($roles) ? $roles : iterator_to_array($roles)));
     }
 
     public function allows(?Authenticatable $user, Ability|string $ability, array $arguments = []): bool
