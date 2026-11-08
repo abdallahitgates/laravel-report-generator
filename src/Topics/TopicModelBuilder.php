@@ -74,6 +74,7 @@ final class TopicModelBuilder
                 validToColumn: $topic->validToColumn,
                 conditions: $topic->conditions(),
                 lookup: $topic->lookup,
+                scopeColumns: $topic->scopeColumns,
             );
         }
 

@@ -250,6 +250,26 @@ it('lets lookup topics be joined but never be the main topic', function () {
     }
 });
 
+it('lets the scope restrict extra columns a topic names', function () {
+    \Abdalla\ReportGenerator\Tests\Fixtures\Engine\DoctorsTopic::$scopeBySpeciality = true;
+    try {
+        fixtureEngine();
+        ReportGenerator::unrestricted(['specialities']);
+        ReportGenerator::scopeUsing(function (Builder $q, ScopeContext $ctx) {
+            if ($column = $ctx->scopeColumn('speciality')) {
+                $q->where($column, 2);
+            } elseif ($column = $ctx->employeeColumn()) {
+                $q->where($column, '>', 0);
+            }
+        });
+
+        $result = app(QueryEngine::class)->rows(['root' => 'doctors', 'fields' => [['ref' => 'doctors.name', 'as' => 'd']]], [], new GenericUser(['id' => 3]), 0, 10);
+        expect(array_column($result['rows'], 'd'))->toBe(['Dr B']);
+    } finally {
+        \Abdalla\ReportGenerator\Tests\Fixtures\Engine\DoctorsTopic::$scopeBySpeciality = false;
+    }
+});
+
 it('keeps topics away from users who are neither scoped, allowed nor admins', function () {
     fixtureEngine();
 

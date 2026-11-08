@@ -10,7 +10,7 @@ server, and exports stream with constant memory.
 
 The UI ships separately as [`@abdalla/report-generator-vue`](https://github.com/abdallahitgates/report-generator-vue).
 
-> Version **0.2.0** (v2 phase P1a). Topics defined in code replace the
+> Version **0.4.0** (v2 phase P2). Topics defined in code replace the
 > database scan and Model Studio of 0.1. The query engine, saved reports and
 > the builder UI are unchanged.
 
@@ -292,6 +292,18 @@ class StructureScope implements RowScope
             $query->whereIn($column, $ctx->user->visibleDivisionIds($ctx->lines, $ctx->from, $ctx->to));
         }
     }
+}
+```
+
+Topics can expose further columns to the scope by name, for rules beyond
+employee and division, e.g. products a user is limited to:
+
+```php
+public array $scopeColumns = ['product' => 'product_id'];
+
+// in the scope
+if ($column = $ctx->scopeColumn('product')) {
+    $query->whereIn($column, $allowedProductIds);
 }
 ```
 

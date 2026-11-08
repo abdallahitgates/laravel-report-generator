@@ -14,6 +14,14 @@ class DoctorsTopic extends Topic
 
     public ?string $lineColumn = 'line_id';
 
+    /** Lets a test expose speciality_id to the row scope. */
+    public static bool $scopeBySpeciality = false;
+
+    public function __construct()
+    {
+        $this->scopeColumns = static::$scopeBySpeciality ? ['speciality' => 'speciality_id'] : [];
+    }
+
     public function fields(): array
     {
         return [

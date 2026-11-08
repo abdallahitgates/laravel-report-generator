@@ -31,6 +31,7 @@ final class PublishedDataset
         public readonly ?string $validToColumn = null,
         public readonly array $conditions = [],
         public readonly bool $lookup = false,
+        public readonly array $scopeColumns = [],
     ) {
     }
 
@@ -53,10 +54,10 @@ final class PublishedDataset
         }
     }
 
-    /** Whether reports on this dataset are cut by employee and/or division (and so by the row scope). */
+    /** Whether the row scope applies: the topic has an employee, division or extra scope column. */
     public function isScoped(): bool
     {
-        return $this->employeeColumn !== null || $this->divisionColumn !== null;
+        return $this->employeeColumn !== null || $this->divisionColumn !== null || $this->scopeColumns !== [];
     }
 
     public static function fromArray(array $data): self

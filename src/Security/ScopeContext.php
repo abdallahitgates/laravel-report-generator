@@ -43,4 +43,12 @@ final class ScopeContext
     {
         return $this->dataset->lineColumn ? $this->column($this->dataset->lineColumn) : null;
     }
+
+    /** Qualified column the topic declares in $scopeColumns under this name, e.g. scopeColumn('product'). */
+    public function scopeColumn(string $name): ?string
+    {
+        $column = $this->dataset->scopeColumns[$name] ?? null;
+
+        return $column ? $this->column($column) : null;
+    }
 }

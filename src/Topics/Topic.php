@@ -47,6 +47,14 @@ abstract class Topic
 
     public ?string $lineColumn = null;
 
+    /**
+     * Further columns the row scope may restrict, by name, for host rules
+     * beyond employee and division: ['product' => 'product_id'].
+     *
+     * @var array<string, string>
+     */
+    public array $scopeColumns = [];
+
     public ?string $dateColumn = null;
 
     /**

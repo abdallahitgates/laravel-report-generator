@@ -296,6 +296,7 @@ final class QueryEngine
                 'permission' => $topic->permission,
                 'public' => $topic->public,
                 'lookup' => $topic->lookup,
+                'scope_columns' => (object) $topic->scopeColumns,
                 'conditions' => (object) $topic->conditions(),
                 'columns' => [
                     'period' => $topic->validFromColumn ? trim($topic->validFromColumn.' – '.$topic->validToColumn, ' –') : $topic->dateColumn,
