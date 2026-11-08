@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Facade;
 
 /**
  * @method static \Abdalla\ReportGenerator\ReportGenerator topics(iterable $topics)
+ * @method static \Abdalla\ReportGenerator\ReportGenerator combinable(iterable|\Closure|\Abdalla\ReportGenerator\Contracts\CombinableReport $reports)
  * @method static \Abdalla\ReportGenerator\ReportGenerator scopeUsing(\Abdalla\ReportGenerator\Contracts\RowScope|\Closure|string $scope)
  * @method static \Abdalla\ReportGenerator\ReportGenerator policy(string $dataset, \Closure|string|\Abdalla\ReportGenerator\Contracts\RowPolicy $policy)
  * @method static \Abdalla\ReportGenerator\ReportGenerator unrestricted(array $datasets)

@@ -91,6 +91,66 @@ Abilities: `report-generator.model.manage`, `report-generator.report.create`,
 `report-generator.report.export`, `report-generator.report.view-all`,
 `report-generator.report.publish`.
 
+## Combined reports
+
+Columns of existing reports side by side, one row per employee or per
+division: visits from one report, sales from another, a formula across
+them. Each existing report is adapted in a few lines; the package calls its
+controller method directly as the current user (its own row rules apply),
+after checking the report's own permission:
+
+```php
+use Abdalla\ReportGenerator\Combine\CombineRun;
+use Abdalla\ReportGenerator\Combine\ExistingReport;
+
+ReportGenerator::combinable(fn () => [
+    ExistingReport::make('visit_statistics', 'Visit statistics')
+        ->inGroup('Visits')
+        ->requires('show_reports_visits_statistics')
+        ->action([VisitStatisticsController::class, 'filter'])
+        ->payload(fn (CombineRun $run) => ['visitFilter' => [
+            'fromDate' => $run->fromDate(), 'toDate' => $run->toDate(),
+            'lines' => $run->lines, 'filter' => $run->byEmployee() ? 2 : 1,
+        ]])
+        ->rowsAt('data')            // where the rows are in the response
+        ->hiding(['color']),        // keys never offered as columns
+
+    // A route with {line}: run once per line and merge.
+    ExistingReport::make('call_rate', 'Call rate')
+        ->action([CallRateReportController::class, 'filter'])
+        ->perLine(fn (int $id) => Line::find($id))
+        ->payload(fn (CombineRun $run) => ['visitFilter' => [...]]),
+]);
+```
+
+Rows need an `id` (the employee or division) and may carry `line`,
+`division` and `employee` names (rename with `names([...])`). Columns are
+discovered from the rows: numbers, `"45.5%"` percentages and text; declare
+them with `offering([...])` to skip discovery. Averages and rates
+(`avg_*`, `*_rate`, `achievement`, ...) get no grand total.
+
+A combined report is a definition with `"type": "combined"`:
+
+```json
+{
+  "type": "combined",
+  "level": "employee",
+  "context": {"period": "this_month", "lines": []},
+  "fields": [
+    {"base": "employee", "as": "employee"},
+    {"report": "visit_statistics", "field": "total_actual", "as": "visits", "label": "Visits"},
+    {"report": "sales", "field": "value", "as": "sales"},
+    {"formula": "ROUND(sales / visits, 2)", "as": "sales_per_visit"}
+  ],
+  "sort": [{"field": "visits", "dir": "desc"}]
+}
+```
+
+It saves, publishes, runs, totals and exports through the same endpoints as
+any report. Empty `lines` means the viewer's own lines (from the lines
+picker topic). The merged table is cached (`cache.ttl`), so paging, sorting
+and totals do not run the reports again.
+
 ## Report filters
 
 Every report can be limited by period, lines, divisions and employees on
@@ -365,6 +425,8 @@ All paths are under the configured prefix (default `api/report-generator`).
 | POST | `/query/validate` | create reports | Check a definition: errors, columns, mode, estimated rows |
 | POST | `/query/rows` | create reports | One page of results (`definition`, `parameters`, `page`, `groups`, `query_id`) |
 | POST | `/query/summary` | create reports | Row count and grand totals of a definition |
+| GET | `/combine/reports` | create reports | Existing reports the user may combine |
+| GET | `/combine/reports/{key}/fields` | create reports | Columns a report offers (`level`, `period`, `lines[]`) |
 | POST | `/query/export` | create + export | A definition as `csv` or `xlsx`, streamed |
 | POST | `/query/values` | create reports | Distinct values of a field for filter pickers (`field`, `search`) |
 | POST | `/query/{id}/cancel` | create reports | Stop your own running query |

@@ -1,5 +1,6 @@
 <?php
 
+use Abdalla\ReportGenerator\Http\Controllers\CombineController;
 use Abdalla\ReportGenerator\Http\Controllers\ExportController;
 use Abdalla\ReportGenerator\Http\Controllers\MetaController;
 use Abdalla\ReportGenerator\Http\Controllers\Query\QueryController;
@@ -44,6 +45,10 @@ Route::middleware('report-generator.can:createReports')->group(function () {
     Route::post('query/rows', [QueryController::class, 'rows'])->name('query.rows');
     Route::post('query/values', [QueryController::class, 'values'])->name('query.values');
     Route::post('query/summary', [QueryController::class, 'summary'])->name('query.summary');
+
+    // Combined reports: existing reports side by side per employee or division.
+    Route::get('combine/reports', [CombineController::class, 'reports'])->name('combine.reports');
+    Route::get('combine/reports/{report}/fields', [CombineController::class, 'fields'])->name('combine.fields');
     Route::post('query/export', [ExportController::class, 'definition'])->middleware('report-generator.can:exportReports')->name('query.export');
     Route::post('query/{queryId}/cancel', [QueryController::class, 'cancel'])->name('query.cancel');
 

@@ -163,13 +163,7 @@ class ReportController extends Controller
      */
     private function checkDefinition(array $definition, Request $request): void
     {
-        try {
-            $this->engine->compile($definition, [], $request->user());
-        } catch (QueryException $e) {
-            if ($e->errorCode !== 'MISSING_PARAMETER') {
-                throw $e;
-            }
-        }
+        $this->engine->check($definition, $request->user());
     }
 
     private function authorizeView(Report $report, Request $request): void

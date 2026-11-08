@@ -50,6 +50,19 @@ class ReportGenerator
     }
 
     /**
+     * Existing reports that can be combined on the employee or division
+     * (Combine\ExistingReport), or a closure returning them.
+     *
+     * @param  iterable<\Abdalla\ReportGenerator\Contracts\CombinableReport>|\Closure|\Abdalla\ReportGenerator\Contracts\CombinableReport  $reports
+     */
+    public function combinable(iterable|\Closure|\Abdalla\ReportGenerator\Contracts\CombinableReport $reports): static
+    {
+        app(\Abdalla\ReportGenerator\Combine\CombineRegistry::class)->register($reports);
+
+        return $this;
+    }
+
+    /**
      * The rule for which rows of employee/division topics a user may see.
      *
      * @param  RowScope|class-string<RowScope>|Closure(\Illuminate\Database\Query\Builder, Security\ScopeContext): void  $scope

@@ -59,8 +59,33 @@ final class QueryEngine
         CacheManager $caches,
         private readonly QueryCanceller $canceller,
         private readonly TopicRegistry $topics,
+        private readonly \Abdalla\ReportGenerator\Combine\CombineRegistry $combinable,
     ) {
         $this->cache = $caches->store(config('report-generator.cache.store'));
+    }
+
+    /** Combined reports (columns of several existing reports) run here instead of in SQL. */
+    public function combiner(): \Abdalla\ReportGenerator\Combine\Combiner
+    {
+        return new \Abdalla\ReportGenerator\Combine\Combiner($this->combinable, $this->generator, $this->cache);
+    }
+
+    /** Throws when the definition cannot run for this user (missing parameters aside). */
+    public function check(array $definition, ?Authenticatable $user): void
+    {
+        if (\Abdalla\ReportGenerator\Combine\Combiner::isCombined($definition)) {
+            $this->combiner()->check($definition, $user);
+
+            return;
+        }
+
+        try {
+            $this->compile($definition, [], $user);
+        } catch (QueryException $e) {
+            if ($e->errorCode !== 'MISSING_PARAMETER') {
+                throw $e;
+            }
+        }
     }
 
     /**
@@ -117,6 +142,9 @@ final class QueryEngine
     ): array {
         $size = max(1, min($size ?? (int) config('report-generator.limits.preview_page_size', 200), (int) config('report-generator.limits.max_page_size', 5000)));
         $offset = max(0, $offset);
+        if (\Abdalla\ReportGenerator\Combine\Combiner::isCombined($definition)) {
+            return $this->combiner()->page($definition, $parameters, $user, $offset, $size);
+        }
         $timeoutMs = (int) config('report-generator.limits.preview_timeout_ms', 15000);
 
         $compiled = $this->compile($definition, $parameters, $user, $groups, $timeoutMs);
@@ -175,6 +203,10 @@ final class QueryEngine
      */
     public function summary(array $definition, array $parameters, ?Authenticatable $user): array
     {
+        if (\Abdalla\ReportGenerator\Combine\Combiner::isCombined($definition)) {
+            return $this->combiner()->summary($definition, $user);
+        }
+
         $timeoutMs = (int) config('report-generator.limits.preview_timeout_ms', 15000);
         $compiled = $this->compile($definition, $parameters, $user, null, $timeoutMs);
         $grammar = $compiled->connection->getQueryGrammar();
@@ -292,6 +324,10 @@ final class QueryEngine
      */
     public function stream(array $definition, array $parameters, ?Authenticatable $user): array
     {
+        if (\Abdalla\ReportGenerator\Combine\Combiner::isCombined($definition)) {
+            return $this->combiner()->stream($definition, $user);
+        }
+
         $timeoutMs = (int) config('report-generator.limits.export_timeout_ms', 900000);
         $compiled = $this->compile($definition, $parameters, $user, null, $timeoutMs);
         $columns = array_values(array_filter($compiled->columns, fn ($c) => $c['kind'] !== 'meta'));
@@ -318,6 +354,12 @@ final class QueryEngine
      */
     public function validate(array $definition, array $parameters, ?Authenticatable $user): array
     {
+        if (\Abdalla\ReportGenerator\Combine\Combiner::isCombined($definition)) {
+            $this->combiner()->check($definition, $user);
+
+            return ['mode' => 'combined'];
+        }
+
         $compiled = $this->compile($definition, $parameters, $user);
 
         return array_filter([

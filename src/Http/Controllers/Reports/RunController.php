@@ -34,13 +34,15 @@ class RunController extends Controller
             'name' => $report->name,
             'description' => $report->description,
             'root' => $definition['root'] ?? null,
+            'type' => $definition['type'] ?? 'topic',
+            'level' => $definition['level'] ?? null,
             'context' => $definition['context'] ?? (object) [],
             'parameters' => $definition['parameters'] ?? [],
             // Columns (no refs or filters: viewers need names, kinds and grouping only).
             'fields' => array_map(fn (array $f) => array_filter([
                 'as' => $f['as'] ?? null,
                 'label' => $f['label'] ?? null,
-                'kind' => isset($f['agg']) || isset($f['formula']) ? 'value' : 'dimension',
+                'kind' => isset($f['agg']) || isset($f['formula']) || isset($f['report']) ? 'value' : 'dimension',
                 'grain' => $f['grain'] ?? null,
             ], fn ($v) => $v !== null), $definition['fields'] ?? []),
             'sort' => $definition['sort'] ?? [],
