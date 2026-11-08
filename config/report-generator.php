@@ -124,6 +124,15 @@ return [
     |
     */
 
+    'permissions' => [
+        // Class implementing Contracts\PermissionStore; null = spatie/laravel-permission when installed.
+        'store' => null,
+        // Guard of the permissions and roles (spatie). null = the default auth guard.
+        'guard' => env('RG_PERMISSION_GUARD'),
+        // Suggested permission name for a published report: prefix + report name in snake case.
+        'prefix' => 'show_reports_',
+    ],
+
     'topics' => [
         'paths' => [
             'app/Reporting/Topics' => 'App\\Reporting\\Topics',

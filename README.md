@@ -88,7 +88,22 @@ ReportGenerator::source(\App\Reports\SalesIncentiveSource::class);
 ```
 
 Abilities: `report-generator.model.manage`, `report-generator.report.create`,
-`report-generator.report.export`, `report-generator.report.view-all`.
+`report-generator.report.export`, `report-generator.report.view-all`,
+`report-generator.report.publish`.
+
+## Publishing reports
+
+A saved report can be published: it gets a permission named after it
+(suggested `show_reports_<report name>`), the chosen roles get that
+permission, and it can be listed in the menu. Everyone holding the
+permission can open and run it (`/reports/{uuid}/view`, `/rows`, `/values`)
+without being able to build reports, always with their own row scope; they
+pick the period, lines, divisions and employees, and the report's own
+parameters.
+
+Permissions live in spatie/laravel-permission (5 or 6) out of the box, on
+`permissions.guard` (default: the default auth guard). Other systems
+implement `Contracts\PermissionStore` and set `permissions.store`.
 
 ## Topics
 
@@ -328,6 +343,12 @@ All paths are under the configured prefix (default `api/report-generator`).
 | POST | `/query/values` | create reports | Distinct values of a field for filter pickers (`field`, `search`) |
 | POST | `/query/{id}/cancel` | create reports | Stop your own running query |
 
+| GET | `/menu` | any user | Published reports in the menu the user may open, with their menu group |
+| GET | `/reports/{uuid}/view` | may open it | Name, saved report filters and parameters |
+| POST | `/reports/{uuid}/rows` | may open it | Run it: `context` (period, lines, divisions, employees), `parameters`, `page`, `groups` |
+| POST | `/reports/{uuid}/values` | may open it | Filter values for the report's own fields |
+| GET | `/permissions/roles` | publish | Roles a report can be given to |
+| GET / PUT / DELETE | `/reports/{uuid}/publish` | publish | Publishing settings (with a suggested permission) / publish: `permission`, `roles`, `in_menu`, `menu_group` / unpublish |
 | GET | `/reports` | create reports | Library: `scope` (all, mine, shared), `search`, `folder` |
 | POST | `/reports` | create reports | Save a report (`name`, `description`, `folder`, `visibility`, `definition`) |
 | GET / PATCH / DELETE | `/reports/{uuid}` | owner, or shared | Open / change (owner or edit share) / delete (owner) |

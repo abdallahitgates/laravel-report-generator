@@ -2,7 +2,10 @@
 
 use Abdalla\ReportGenerator\Http\Controllers\MetaController;
 use Abdalla\ReportGenerator\Http\Controllers\Query\QueryController;
+use Abdalla\ReportGenerator\Http\Controllers\Reports\MenuController;
+use Abdalla\ReportGenerator\Http\Controllers\Reports\PublishController;
 use Abdalla\ReportGenerator\Http\Controllers\Reports\ReportController;
+use Abdalla\ReportGenerator\Http\Controllers\Reports\RunController;
 use Abdalla\ReportGenerator\Http\Controllers\Topics\TopicController;
 use Illuminate\Support\Facades\Route;
 
@@ -13,6 +16,21 @@ Route::get('meta', MetaController::class)->name('meta');
 
 // Topics are declared in code; admins can browse them with every field and relation.
 Route::get('topics', TopicController::class)->middleware('report-generator.can:manageModel')->name('topics');
+
+// Published reports: the menu, and opening / running a saved report. Anyone
+// who may open the report (owner, shares, its permission); no build ability needed.
+Route::get('menu', MenuController::class)->name('menu');
+Route::get('reports/{report}/view', [RunController::class, 'show'])->name('reports.view');
+Route::post('reports/{report}/rows', [RunController::class, 'rows'])->name('reports.rows');
+Route::post('reports/{report}/values', [RunController::class, 'values'])->name('reports.values');
+
+// Publishing: a permission per report, given to roles, and a menu entry.
+Route::middleware('report-generator.can:publishReports')->group(function () {
+    Route::get('permissions/roles', [PublishController::class, 'roles'])->name('permissions.roles');
+    Route::get('reports/{report}/publish', [PublishController::class, 'show'])->name('reports.publish.show');
+    Route::put('reports/{report}/publish', [PublishController::class, 'update'])->name('reports.publish');
+    Route::delete('reports/{report}/publish', [PublishController::class, 'destroy'])->name('reports.unpublish');
+});
 
 // Building and running reports.
 Route::middleware('report-generator.can:createReports')->group(function () {

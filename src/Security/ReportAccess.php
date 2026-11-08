@@ -10,7 +10,11 @@ use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Who may open and change saved reports. Opening a report never widens
- * what its rows show: it always runs with the viewer's own row policies.
+ * what its rows show: it always runs with the viewer's own row policies
+ * and row scope.
+ *
+ * A published report can be opened by everyone holding its permission,
+ * including people who cannot build reports themselves.
  */
 final class ReportAccess
 {
@@ -23,7 +27,33 @@ final class ReportAccess
         return $this->isOwner($report, $user)
             || $report->visibility === Report::PUBLIC
             || $this->share($report, $user) !== null
+            || $this->holdsPermission($report, $user)
             || $this->generator->allows($user, Ability::ViewAllReports);
+    }
+
+    public function holdsPermission(Report $report, ?Authenticatable $user): bool
+    {
+        return $report->permission !== null && $user !== null && $this->generator->allows($user, $report->permission);
+    }
+
+    public function canPublish(?Authenticatable $user): bool
+    {
+        return $this->generator->allows($user, Ability::PublishReports);
+    }
+
+    /**
+     * Published reports this user holds the permission of.
+     *
+     * @return list<string> permission names
+     */
+    public function heldPermissions(?Authenticatable $user): array
+    {
+        if ($user === null) {
+            return [];
+        }
+        $permissions = Report::query()->whereNotNull('permission')->distinct()->pluck('permission');
+
+        return $permissions->filter(fn (string $p) => $this->generator->allows($user, $p))->values()->all();
     }
 
     public function canEdit(Report $report, ?Authenticatable $user): bool
@@ -47,8 +77,10 @@ final class ReportAccess
         $roles = $this->generator->rolesOf($user);
         $viewAll = $this->generator->allows($user, Ability::ViewAllReports);
 
-        $shared = function (Builder $q) use ($id, $roles) {
+        $held = $viewAll ? [] : $this->heldPermissions($user);
+        $shared = function (Builder $q) use ($id, $roles, $held) {
             $q->where('visibility', Report::PUBLIC)
+                ->when($held !== [], fn ($w) => $w->orWhereIn('permission', $held))
                 ->orWhereHas('shares', function (Builder $s) use ($id, $roles) {
                     $s->where(fn ($w) => $w->where('shareable_type', 'user')->where('shareable_id', (string) $id))
                         ->orWhere(fn ($w) => $w->where('shareable_type', 'role')->whereIn('shareable_id', $roles ?: ['__none__']));

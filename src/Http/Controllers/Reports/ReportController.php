@@ -197,6 +197,11 @@ class ReportController extends Controller
             'is_owner' => $this->access->isOwner($report, $user),
             'can_edit' => $this->access->canEdit($report, $user),
             'shared' => $report->visibility === Report::PUBLIC || $report->shares->isNotEmpty(),
+            'published' => $report->permission !== null,
+            'permission' => $report->permission,
+            'in_menu' => (bool) $report->in_menu,
+            'menu_group' => $report->menu_group,
+            'can_publish' => $this->access->canPublish($user),
             'model_version' => $report->model_version,
             'updated_at' => $report->updated_at?->toIso8601String(),
         ];

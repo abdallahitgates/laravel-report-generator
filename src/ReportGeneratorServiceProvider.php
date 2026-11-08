@@ -21,6 +21,16 @@ class ReportGeneratorServiceProvider extends ServiceProvider
         $this->app->singleton(ReportGenerator::class);
         $this->app->singleton(\Abdalla\ReportGenerator\Topics\TopicRegistry::class);
         $this->app->singleton(\Abdalla\ReportGenerator\Semantic\Published\SemanticModelRepository::class);
+        $this->app->singleton(\Abdalla\ReportGenerator\Contracts\PermissionStore::class, function ($app) {
+            $store = config('report-generator.permissions.store');
+            if ($store) {
+                return $app->make($store);
+            }
+
+            return class_exists(\Spatie\Permission\PermissionRegistrar::class)
+                ? new \Abdalla\ReportGenerator\Permissions\SpatiePermissionStore(config('report-generator.permissions.guard'))
+                : new \Abdalla\ReportGenerator\Permissions\UnsupportedPermissionStore();
+        });
     }
 
     public function boot(): void

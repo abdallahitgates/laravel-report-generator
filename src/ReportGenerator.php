@@ -156,11 +156,14 @@ class ReportGenerator
             return (bool) ($this->authorizer)($user, $ability, $arguments);
         }
 
-        if ($user !== null && $this->gate->has($ability)) {
+        // The package's own abilities fall back to authorization.default when the
+        // host has not defined them; anything else (a published report's
+        // permission) goes to the Gate, where permission packages answer.
+        if ($user !== null && ($this->gate->has($ability) || Ability::tryFrom($ability) === null)) {
             return $this->gate->forUser($user)->allows($ability, $arguments);
         }
 
-        return (bool) config('report-generator.authorization.default', false);
+        return Ability::tryFrom($ability) !== null && (bool) config('report-generator.authorization.default', false);
     }
 
     public function policies(): PolicyRegistry

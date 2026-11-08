@@ -19,6 +19,10 @@ use Illuminate\Support\Str;
  * @property string $visibility  private | public
  * @property array $definition
  * @property ?int $model_version
+ * @property ?string $permission  set when published: who holds it may open the report
+ * @property bool $in_menu
+ * @property ?string $menu_group
+ * @property ?\Illuminate\Support\Carbon $published_at
  */
 class Report extends RgModel
 {
@@ -31,6 +35,7 @@ class Report extends RgModel
 
     protected $attributes = [
         'visibility' => self::PRIVATE,
+        'in_menu' => false,
     ];
 
     protected $casts = [
@@ -38,6 +43,8 @@ class Report extends RgModel
         'definition_version' => 'integer',
         'model_version' => 'integer',
         'owner_id' => 'integer',
+        'in_menu' => 'boolean',
+        'published_at' => 'datetime',
     ];
 
     protected static function booted(): void

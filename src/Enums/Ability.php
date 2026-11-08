@@ -12,6 +12,8 @@ enum Ability: string
     case CreateReports = 'report-generator.report.create';
     case ExportReports = 'report-generator.report.export';
     case ViewAllReports = 'report-generator.report.view-all';
+    /** Publish reports: a permission per report, given to roles, and a menu entry. */
+    case PublishReports = 'report-generator.report.publish';
 
     /** Short camelCase name used in API payloads, e.g. "manageModel". */
     public function key(): string
