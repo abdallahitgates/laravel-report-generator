@@ -6,6 +6,7 @@ use Closure;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Database\Query\Builder;
 use Abdalla\ReportGenerator\Contracts\RowPolicy;
+use Abdalla\ReportGenerator\Contracts\RowScope;
 
 final class PolicyRegistry
 {
@@ -31,6 +32,35 @@ final class PolicyRegistry
     /** @var array<string, true> */
     private array $unrestricted = [];
 
+    private RowScope|Closure|null $scope = null;
+
+    /** @param  RowScope|Closure(Builder, ScopeContext): void  $scope */
+    public function setScope(RowScope|Closure $scope): void
+    {
+        $this->scope = $scope;
+    }
+
+    public function hasScope(): bool
+    {
+        return $this->scope !== null;
+    }
+
+    /**
+     * Applies the row scope in its own nested where, so an OR inside it can
+     * never widen what the rest of the query allows.
+     */
+    public function applyScope(Builder $query, ScopeContext $context): void
+    {
+        if ($this->scope === null || ! $context->dataset->isScoped()) {
+            return;
+        }
+
+        $scope = $this->scope;
+        $query->where(function (Builder $nested) use ($scope, $context) {
+            $scope instanceof RowScope ? $scope->apply($nested, $context) : $scope($nested, $context);
+        });
+    }
+
     public function has(string $dataset): bool
     {
         return ! empty($this->policies[$dataset]);
@@ -53,7 +83,7 @@ final class PolicyRegistry
     /** Fingerprint of what is registered, so cached results never cross a policy change. */
     public function fingerprint(): string
     {
-        return md5(json_encode([array_map('count', $this->policies), array_keys($this->unrestricted)]));
+        return md5(json_encode([array_map('count', $this->policies), array_keys($this->unrestricted), $this->scope !== null]));
     }
 
     /** @return list<string> */

@@ -5,8 +5,7 @@ namespace Abdalla\ReportGenerator;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Abdalla\ReportGenerator\Console\InstallCommand;
-use Abdalla\ReportGenerator\Console\PublishCommand;
-use Abdalla\ReportGenerator\Console\ScanCommand;
+use Abdalla\ReportGenerator\Console\MakeTopicCommand;
 use Abdalla\ReportGenerator\Http\Middleware\Authorize;
 use Abdalla\ReportGenerator\Security\PolicyRegistry;
 use Abdalla\ReportGenerator\Sources\SourceRegistry;
@@ -20,6 +19,7 @@ class ReportGeneratorServiceProvider extends ServiceProvider
         $this->app->singleton(PolicyRegistry::class);
         $this->app->singleton(SourceRegistry::class);
         $this->app->singleton(ReportGenerator::class);
+        $this->app->singleton(\Abdalla\ReportGenerator\Topics\TopicRegistry::class);
         $this->app->singleton(\Abdalla\ReportGenerator\Semantic\Published\SemanticModelRepository::class);
     }
 
@@ -43,8 +43,7 @@ class ReportGeneratorServiceProvider extends ServiceProvider
 
             $this->commands([
                 InstallCommand::class,
-                ScanCommand::class,
-                PublishCommand::class,
+                MakeTopicCommand::class,
             ]);
         }
     }

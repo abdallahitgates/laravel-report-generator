@@ -20,19 +20,10 @@ it('rolls back cleanly', function () {
     }
 });
 
-it('cascades fields when a dataset is deleted', function () {
+it('drops the tables of the scanned model v0.1 used', function () {
     $this->artisan('migrate')->assertSuccessful();
-    $db = app('db')->connection();
 
-    $datasetId = $db->table('rg_datasets')->insertGetId([
-        'key' => 'visits', 'source_type' => 'table', 'source_name' => 'visits', 'label' => 'Visits',
-    ]);
-    $db->table('rg_fields')->insert([
-        'dataset_id' => $datasetId, 'key' => 'id', 'column' => 'id', 'label' => 'ID',
-        'data_type' => 'integer', 'role' => 'key',
-    ]);
-
-    $db->table('rg_datasets')->where('id', $datasetId)->delete();
-
-    expect($db->table('rg_fields')->count())->toBe(0);
+    foreach (['datasets', 'fields', 'relationships', 'model_versions', 'schema_snapshots'] as $table) {
+        expect(Schema::hasTable('rg_'.$table))->toBeFalse("rg_{$table} should be gone");
+    }
 });

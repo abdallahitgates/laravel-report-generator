@@ -60,6 +60,36 @@ final class EloquentRelationshipScanner
         return $edges;
     }
 
+    /**
+     * The belongsTo / hasOne / hasMany relations one model declares.
+     *
+     * @param  class-string<Model>  $class
+     * @return list<array{method: string, type: string, related: class-string<Model>, foreign_key: string, other_key: string}>
+     */
+    public function relationsOf(string $class): array
+    {
+        $model = new $class();
+        $found = [];
+
+        foreach ($this->relationMethods($class) as $method) {
+            try {
+                $relation = $model->{$method}();
+            } catch (Throwable) {
+                continue;
+            }
+
+            if ($relation instanceof BelongsTo) {
+                $found[] = ['method' => $method, 'type' => 'belongsTo', 'related' => $relation->getRelated()::class,
+                    'foreign_key' => $relation->getForeignKeyName(), 'other_key' => $relation->getOwnerKeyName()];
+            } elseif ($relation instanceof HasOne || $relation instanceof HasMany) {
+                $found[] = ['method' => $method, 'type' => $relation instanceof HasOne ? 'hasOne' : 'hasMany', 'related' => $relation->getRelated()::class,
+                    'foreign_key' => $relation->getForeignKeyName(), 'other_key' => $relation->getLocalKeyName()];
+            }
+        }
+
+        return $found;
+    }
+
     /** @return list<string> */
     public function warnings(): array
     {

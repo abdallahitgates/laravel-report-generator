@@ -17,7 +17,22 @@ final class PublishedDataset
         public readonly ?string $defaultTimeField,
         public readonly ?string $softDeleteColumn,
         public readonly ?int $rowEstimate,
+        public readonly ?string $group = null,
+        public readonly ?string $description = null,
+        public readonly ?string $countLabel = null,
+        public readonly ?string $employeeColumn = null,
+        public readonly ?string $divisionColumn = null,
+        public readonly ?string $lineColumn = null,
+        public readonly ?string $dateColumn = null,
+        public readonly bool $public = false,
+        public readonly ?string $permission = null,
     ) {
+    }
+
+    /** Whether reports on this dataset are cut by employee and/or division (and so by the row scope). */
+    public function isScoped(): bool
+    {
+        return $this->employeeColumn !== null || $this->divisionColumn !== null;
     }
 
     public static function fromArray(array $data): self

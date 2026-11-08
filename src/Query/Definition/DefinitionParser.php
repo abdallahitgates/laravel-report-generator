@@ -80,7 +80,51 @@ final class DefinitionParser
             sort: $this->sort($data['sort'] ?? [], $aliases),
             limit: $this->limit($data['limit'] ?? null),
             subtotals: (bool) ($data['subtotals'] ?? false),
+            context: $this->context($data['context'] ?? []),
         );
+    }
+
+    /**
+     * The fixed report filters: period, lines, divisions, employees.
+     */
+    private function context(mixed $context): ReportContext
+    {
+        if (! is_array($context)) {
+            $this->fail('INVALID_CONTEXT', 'The report filters (period, lines, divisions, employees) must be an object.', 'context');
+        }
+
+        $from = $to = null;
+        $period = $this->substitute($context['period'] ?? null);
+        if (is_string($period) && $period !== '') {
+            [$from, $to] = DatePresets::resolve($period, $this->now)
+                ?? $this->fail('INVALID_PERIOD', "Unknown period \"{$period}\". Use a preset such as this_month, or [from, to].", 'context.period');
+        } elseif (is_array($period) && $period !== []) {
+            if (count($period) !== 2 || ! is_string($period[0] ?? null) || ! is_string($period[1] ?? null)
+                || strtotime($period[0]) === false || strtotime($period[1]) === false) {
+                $this->fail('INVALID_PERIOD', 'The period needs two dates [from, to].', 'context.period');
+            }
+            [$from, $to] = [$period[0], $period[1]];
+        }
+
+        $ids = function (string $key) use ($context): array {
+            $value = $this->substitute($context[$key] ?? []);
+            if ($value === null || $value === '') {
+                return [];
+            }
+            $value = is_array($value) ? $value : [$value];
+            if (count($value) > self::MAX_IN_VALUES) {
+                $this->fail('INVALID_CONTEXT', 'At most '.self::MAX_IN_VALUES." {$key} can be selected.", "context.{$key}");
+            }
+            foreach ($value as $id) {
+                if (! is_int($id) && ! (is_string($id) && ctype_digit($id))) {
+                    $this->fail('INVALID_CONTEXT', "Pick {$key} from the list.", "context.{$key}");
+                }
+            }
+
+            return array_values(array_unique(array_map('intval', $value)));
+        };
+
+        return new ReportContext($from, $to, $ids('lines'), $ids('divisions'), $ids('employees'));
     }
 
     /** @return list<FieldSpec> */

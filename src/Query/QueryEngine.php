@@ -13,11 +13,15 @@ use Abdalla\ReportGenerator\Query\Definition\DefinitionParser;
 use Abdalla\ReportGenerator\Query\Execution\ConcurrencyLimiter;
 use Abdalla\ReportGenerator\Query\Execution\DatasetAccess;
 use Abdalla\ReportGenerator\Query\Execution\QueryCanceller;
-use Abdalla\ReportGenerator\Query\Planning\JoinGraph;
 use Abdalla\ReportGenerator\Query\Planning\QueryPlanner;
-use Abdalla\ReportGenerator\Query\Planning\Step;
 use Abdalla\ReportGenerator\ReportGenerator;
 use Abdalla\ReportGenerator\Security\PolicyContext;
+use Abdalla\ReportGenerator\Security\ScopeContext;
+use Abdalla\ReportGenerator\Semantic\Published\SemanticModel;
+use Abdalla\ReportGenerator\Topics\Relation;
+use Abdalla\ReportGenerator\Topics\Topic;
+use Abdalla\ReportGenerator\Topics\TopicModelBuilder;
+use Abdalla\ReportGenerator\Topics\TopicRegistry;
 use Abdalla\ReportGenerator\Security\PolicyRegistry;
 use Abdalla\ReportGenerator\Semantic\Published\PublishedDataset;
 use Abdalla\ReportGenerator\Semantic\Published\SemanticModelRepository;
@@ -53,6 +57,7 @@ final class QueryEngine
         private readonly DatabaseManager $db,
         CacheManager $caches,
         private readonly QueryCanceller $canceller,
+        private readonly TopicRegistry $topics,
     ) {
         $this->cache = $caches->store(config('report-generator.cache.store'));
     }
@@ -79,9 +84,9 @@ final class QueryEngine
             $parsed = $parsed->atGroupLevel($groups['columns'], $groups['keys']);
         }
 
-        $model = $this->models->current();
-        $access = new DatasetAccess($this->generator, $this->policies, $user);
-        $plan = $this->planner->plan($parsed, $model, $access->asserter($model));
+        $model = $this->models->current($user);
+        $access = new DatasetAccess($this->generator, $this->policies, $user, $model);
+        $plan = $this->planner->plan($parsed, $model, $access->asserter());
 
         $connection = $this->dataConnection();
 
@@ -91,6 +96,7 @@ final class QueryEngine
             $this->dialects->for($connection),
             $user,
             $timeoutMs ?? (int) config('report-generator.limits.preview_timeout_ms', 15000),
+            $access->viewAll(),
         );
     }
 
@@ -116,7 +122,7 @@ final class QueryEngine
         $query = (clone $compiled->query)->offset($offset)->limit($size + 1);
         $sql = $query->toSql();
         $bindings = $query->getBindings();
-        $version = $this->models->current()->version;
+        $version = $this->models->current($user)->version;
         $cacheKey = 'report-generator:result:'.hash('sha256', implode('|', [$version, $compiled->connection->getName(), $sql, json_encode($bindings), $this->policies->fingerprint()]));
 
         $started = microtime(true);
@@ -188,8 +194,9 @@ final class QueryEngine
             throw new QueryException('INVALID_REF', 'Refer to fields as "dataset.field".', 'field');
         }
 
-        $model = $this->models->current();
-        (new DatasetAccess($this->generator, $this->policies, $user))->asserter($model)($m[1]);
+        $model = $this->models->current($user);
+        $access = new DatasetAccess($this->generator, $this->policies, $user, $model);
+        $access->asserter()($m[1]);
         $dataset = $model->dataset($m[1]) ?? throw new QueryException('UNKNOWN_DATASET', "There is no dataset \"{$m[1]}\".", 'field');
         $field = $dataset->field($m[2]) ?? throw new QueryException('UNKNOWN_FIELD', "{$dataset->label} has no field \"{$m[2]}\".", 'field');
 
@@ -209,6 +216,10 @@ final class QueryEngine
             $query->whereNull("t0.{$dataset->softDeleteColumn}");
         }
         $this->policies->apply($query, new PolicyContext($dataset->key, 't0', $user));
+        if (! $access->viewAll()) {
+            // A picker never offers values from rows the user may not see.
+            $this->policies->applyScope($query, new ScopeContext($dataset, 't0', $user));
+        }
 
         if ($search !== null && $search !== '' && in_array($field->type, [DataType::String, DataType::Text], true)) {
             $escaped = str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search);
@@ -224,42 +235,84 @@ final class QueryEngine
     }
 
     /**
-     * What the builder may offer: without a root, the datasets a report can
-     * start from; with a root, every dataset reachable from it with its
-     * fields and join path options.
+     * What the builder may offer. Without a root: the topics a report can
+     * start from, grouped into tabs. With a root: the topic and every
+     * relation it declares, by name, as a tree (each node carries the join
+     * path the builder sends back, so a report never has to guess a path).
+     * "datasets" repeats the tree as a flat list for older clients.
      */
     public function catalog(?string $root, ?Authenticatable $user): array
     {
-        $model = $this->models->current();
-        $access = new DatasetAccess($this->generator, $this->policies, $user);
+        $model = $this->models->current($user);
+        $access = new DatasetAccess($this->generator, $this->policies, $user, $model);
 
         if ($root === null) {
-            $datasets = array_values(array_filter($model->datasets, fn (PublishedDataset $d) => $access->allows($d->key)));
+            $allowed = array_values(array_filter($model->datasets, fn (PublishedDataset $d) => $access->allows($d->key)));
+            $groups = [];
+            foreach ($allowed as $dataset) {
+                $groups[$dataset->group ?? $dataset->label][] = $this->topicSummary($dataset);
+            }
 
             return [
                 'model_version' => $model->version,
-                'datasets' => array_map(fn (PublishedDataset $d) => [
-                    'key' => $d->key,
-                    'label' => $d->label,
-                    'row_estimate' => $d->rowEstimate,
-                    'fields_count' => count($d->fields),
-                    'default_time_field' => $d->defaultTimeField,
-                ], $datasets),
+                'groups' => array_map(fn ($name, $topics) => ['name' => $name, 'topics' => $topics], array_keys($groups), $groups),
+                'datasets' => array_map(fn (PublishedDataset $d) => $this->topicSummary($d), $allowed),
             ];
         }
 
-        $access->asserter($model)($root);
-        $rootDataset = $model->dataset($root) ?? throw new QueryException('UNKNOWN_DATASET', "There is no dataset \"{$root}\".", 'root');
-        $graph = new JoinGraph($model);
+        $access->asserter()($root);
+        $model->dataset($root) ?? throw new QueryException('UNKNOWN_DATASET', "There is no topic \"{$root}\".", 'root');
 
-        $entries = [$this->catalogEntry($rootDataset, [], $graph, $root)];
-        foreach ($graph->reachable($root) as $key => $paths) {
-            if ($access->allows($key)) {
-                $entries[] = $this->catalogEntry($model->dataset($key), $paths, $graph, $root);
+        $tree = $this->topicNode($this->topics->get($root), [], [], 0, false, $access, $model, null);
+
+        $flat = [];
+        $walk = function (array $node, array $labels) use (&$walk, &$flat) {
+            $labels = [...$labels, $node['label']];
+            $entry = &$flat[$node['topic']];
+            $entry ??= ['key' => $node['topic'], 'label' => $node['topic_label'], 'row_estimate' => null, 'default_time_field' => $node['default_time_field'], 'paths' => [], 'fields' => $node['fields']];
+            if ($node['path'] !== []) {
+                $entry['paths'][] = ['path' => $node['path'], 'description' => implode(' → ', $labels), 'multiplies_rows' => $node['multiplies_rows']];
             }
+            unset($entry);
+            foreach ($node['relations'] as $child) {
+                $walk($child, $labels);
+            }
+        };
+        $walk($tree, []);
+
+        return ['model_version' => $model->version, 'root' => $root, 'tree' => $tree, 'datasets' => array_values($flat)];
+    }
+
+    /**
+     * Every topic with all its fields and relations, for the admin Topics page.
+     */
+    public function topicsOverview(?Authenticatable $user): array
+    {
+        $model = $this->models->current($user);
+        $groups = [];
+        foreach ($this->topics->all() as $key => $topic) {
+            $dataset = $model->dataset($key);
+            $groups[$topic->group()][] = $this->topicSummary($dataset) + [
+                'table' => $topic->table(),
+                'class' => $topic::class,
+                'permission' => $topic->permission,
+                'public' => $topic->public,
+                'fields' => $this->fieldList($dataset),
+                'relations' => array_map(fn (Relation $r) => [
+                    'name' => $r->name,
+                    'label' => $r->label,
+                    'type' => $r->type,
+                    'topic' => $this->topics->byClass($r->topic)->key(),
+                    'topic_label' => $this->topics->byClass($r->topic)->label(),
+                    'foreign_key' => $r->foreignKey,
+                ], $topic->relations()),
+            ];
         }
 
-        return ['model_version' => $model->version, 'root' => $root, 'datasets' => $entries];
+        return [
+            'model_version' => $model->version,
+            'groups' => array_map(fn ($name, $topics) => ['name' => $name, 'topics' => $topics], array_keys($groups), $groups),
+        ];
     }
 
     public function cancel(string $queryId, ?Authenticatable $user): bool
@@ -271,33 +324,84 @@ final class QueryEngine
 
     // ----------------------------------------------------------------------
 
-    /** @param  list<list<Step>>  $paths */
-    private function catalogEntry(PublishedDataset $dataset, array $paths, JoinGraph $graph, string $root): array
+    private function topicSummary(PublishedDataset $dataset): array
+    {
+        return [
+            'key' => $dataset->key,
+            'label' => $dataset->label,
+            'group' => $dataset->group,
+            'description' => $dataset->description,
+            'row_estimate' => $dataset->rowEstimate,
+            'fields_count' => count(array_filter($dataset->fields, fn ($f) => ! $f->hidden)),
+            'default_time_field' => $dataset->defaultTimeField,
+            'filters' => [
+                'period' => $dataset->dateColumn !== null,
+                'line' => $dataset->lineColumn !== null,
+                'division' => $dataset->divisionColumn !== null,
+                'employee' => $dataset->employeeColumn !== null,
+            ],
+        ];
+    }
+
+    /**
+     * @param  list<int>  $path  signed relationship ids from the root
+     * @param  list<string>  $ancestors  topic keys above this node (no cycles)
+     */
+    private function topicNode(Topic $topic, array $path, array $ancestors, int $depth, bool $multiplies, DatasetAccess $access, SemanticModel $model, ?Relation $via): array
+    {
+        $key = $topic->key();
+        $dataset = $model->dataset($key);
+        $children = [];
+
+        if ($depth < (int) config('report-generator.topics.max_depth', 3)) {
+            foreach ($topic->relations() as $relation) {
+                $target = $this->topics->byClass($relation->topic);
+                if (in_array($target->key(), [...$ancestors, $key], true) || ! $access->allows($target->key())) {
+                    continue;
+                }
+                [, $signed] = TopicModelBuilder::step($topic, $relation, $target);
+                $children[] = $this->topicNode(
+                    $target,
+                    [...$path, $signed],
+                    [...$ancestors, $key],
+                    $depth + 1,
+                    $multiplies || $relation->type === Relation::HAS_MANY,
+                    $access,
+                    $model,
+                    $relation,
+                );
+            }
+        }
+
+        return [
+            'name' => $via?->name ?? $key,
+            'label' => $via?->label ?? $topic->label(),
+            'topic' => $key,
+            'topic_label' => $topic->label(),
+            'path' => $path,
+            'multiplies_rows' => $multiplies,
+            'default_time_field' => $dataset->defaultTimeField,
+            'fields' => $this->fieldList($dataset),
+            'relations' => $children,
+        ];
+    }
+
+    private function fieldList(PublishedDataset $dataset): array
     {
         $fields = [[
             'key' => QueryPlanner::ROW_COUNT,
-            'label' => "Number of {$dataset->label}",
+            'label' => $dataset->countLabel ?? "Number of {$dataset->label}",
             'type' => DataType::Integer->value,
             'role' => FieldRole::Measure->value,
             'aggregations' => [Aggregation::Count->value],
             'format' => '#,##0',
+            'hidden' => false,
         ]];
         foreach ($dataset->fields as $field) {
-            $fields[] = $field->toArray();
+            $fields[] = $field->toArray() + ['hidden' => $field->hidden];
         }
 
-        return [
-            'key' => $dataset->key,
-            'label' => $dataset->label,
-            'row_estimate' => $dataset->rowEstimate,
-            'default_time_field' => $dataset->defaultTimeField,
-            'paths' => array_map(fn (array $steps) => [
-                'path' => array_map(fn (Step $s) => $s->signedId(), $steps),
-                'description' => $graph->describe($root, $steps),
-                'multiplies_rows' => (bool) array_filter($steps, fn (Step $s) => $s->fansOut()),
-            ], $paths),
-            'fields' => $fields,
-        ];
+        return $fields;
     }
 
     private function execute(CompiledQuery $compiled, $query, int $timeoutMs, ?Authenticatable $user, ?string $queryId): array

@@ -64,7 +64,7 @@ class ReportController extends Controller
         $report = Report::query()->create($data + [
             'owner_id' => $request->user()?->getAuthIdentifier(),
             'definition_version' => 1,
-            'model_version' => $this->models->current()->version,
+            'model_version' => $this->models->current($request->user())->version,
         ]);
 
         return new JsonResponse(['data' => $this->full($report->load('shares'), $request)], 201);
@@ -77,7 +77,7 @@ class ReportController extends Controller
 
         if (isset($data['definition'])) {
             $this->checkDefinition($data['definition'], $request);
-            $data['model_version'] = $this->models->current()->version;
+            $data['model_version'] = $this->models->current($request->user())->version;
         }
         // Only the owner decides who else sees the report.
         if (isset($data['visibility']) && ! $this->access->isOwner($report, $request->user())) {

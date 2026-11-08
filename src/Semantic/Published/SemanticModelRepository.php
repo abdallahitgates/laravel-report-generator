@@ -2,33 +2,47 @@
 
 namespace Abdalla\ReportGenerator\Semantic\Published;
 
-use Abdalla\ReportGenerator\Models\ModelVersion;
 use Abdalla\ReportGenerator\Query\QueryException;
+use Abdalla\ReportGenerator\ReportGenerator;
+use Abdalla\ReportGenerator\Topics\TopicModelBuilder;
+use Abdalla\ReportGenerator\Topics\TopicRegistry;
+use Illuminate\Contracts\Auth\Authenticatable;
 
 /**
- * Hands the engine the current published model. The payload of a version
- * never changes, so it is parsed once per process per version; only the
- * cheap "which version is current" lookup hits the database.
+ * Hands the engine the model built from the host's topics. Field
+ * visibility depends on the user, so the model is built per user and
+ * kept for the rest of the request.
  */
 final class SemanticModelRepository
 {
-    /** @var array<int, SemanticModel> */
-    private array $parsed = [];
+    /** @var array<string, SemanticModel> */
+    private array $built = [];
 
-    public function current(): SemanticModel
+    public function __construct(
+        private readonly TopicRegistry $topics,
+        private readonly TopicModelBuilder $builder,
+        private readonly ReportGenerator $generator,
+    ) {
+    }
+
+    public function current(?Authenticatable $user = null): SemanticModel
     {
-        $version = (int) ModelVersion::query()->max('version');
-        if ($version === 0) {
-            throw new QueryException('MODEL_NOT_PUBLISHED', 'No data model has been published yet. An admin needs to scan the database and publish it in Model Studio.');
+        if ($this->topics->isEmpty()) {
+            throw new QueryException('NO_TOPICS', 'No report topics are registered yet. Add Topic classes (php artisan report-generator:make-topic) to the topics folder.');
         }
 
-        return $this->parsed[$version] ??= SemanticModel::fromPayload(
-            ModelVersion::query()->where('version', $version)->value('payload') ?? [],
+        $key = $user ? get_class($user).':'.$user->getAuthIdentifier() : 'guest';
+
+        return $this->built[$key] ??= $this->builder->build(
+            $this->topics,
+            $user,
+            fn (?Authenticatable $u) => $this->generator->rolesOf($u),
         );
     }
 
     public function forget(): void
     {
-        $this->parsed = [];
+        $this->built = [];
+        $this->topics->forget();
     }
 }

@@ -18,12 +18,8 @@ final class Tables
     public const RUNS = 'runs';
     public const QUERY_LOG = 'query_log';
 
+    /** Tables in use. The scanned-model tables above were dropped in v0.2. */
     public const ALL = [
-        self::SCHEMA_SNAPSHOTS,
-        self::MODEL_VERSIONS,
-        self::DATASETS,
-        self::FIELDS,
-        self::RELATIONSHIPS,
         self::REPORTS,
         self::REPORT_SHARES,
         self::RUNS,

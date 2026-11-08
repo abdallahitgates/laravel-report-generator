@@ -115,41 +115,38 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Schema scanning
+    | Topics
     |--------------------------------------------------------------------------
     |
-    | Tables matching `excluded_tables` are never offered as datasets.
-    | Columns matching `sensitive_columns` are hidden and flagged; only an
-    | admin can expose them explicitly. Patterns use Str::is() wildcards and
-    | are matched case-insensitively. The package's own tables are always
-    | excluded.
+    | Topic classes are discovered in these folders (path => namespace) and
+    | can also be registered with ReportGenerator::topics([...]). The
+    | builder offers relations up to `max_depth` hops from a report's topic.
+    |
+    */
+
+    'topics' => [
+        'paths' => [
+            'app/Reporting/Topics' => 'App\\Reporting\\Topics',
+        ],
+        'max_depth' => 3,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | make-topic
+    |--------------------------------------------------------------------------
+    |
+    | Used by `php artisan report-generator:make-topic` when it drafts a topic
+    | from a model: columns matching these patterns are left out.
     |
     */
 
     'schema' => [
-        'excluded_tables' => [
-            'migrations', 'failed_jobs', 'jobs', 'job_batches', 'cache', 'cache_locks',
-            'sessions', 'password_resets', 'password_reset_tokens', 'personal_access_tokens',
-            'oauth_*', 'telescope_*', 'horizon_*', 'pulse_*',
-        ],
         'sensitive_columns' => [
             '*password*', '*token*', '*secret*', 'remember_*', '*api_key*', '*private_key*',
             'two_factor_*',
         ],
-        // PostgreSQL schema to scan. Null = first entry of the connection's
-        // search_path, else "public".
         'pgsql_schema' => env('RG_PGSQL_SCHEMA'),
-
-        // Read belongsTo / hasOne / hasMany definitions from Eloquent models
-        // to find relationships the database has no foreign keys for.
-        // Paths are relative to base_path(); the value says whether to recurse.
-        'eloquent' => [
-            'enabled' => true,
-            'paths' => [
-                'app/Models' => true,
-                'app' => false,
-            ],
-        ],
     ],
 
 ];

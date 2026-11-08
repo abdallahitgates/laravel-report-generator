@@ -18,6 +18,10 @@ final class PublishedField
         public readonly array $aggregations,
         public readonly ?string $format,
         public readonly bool $indexed,
+        public readonly bool $hidden = false,
+        public readonly ?string $description = null,
+        /** @var array<string|int, string> stored value => label */
+        public readonly array $options = [],
     ) {
     }
 
@@ -55,6 +59,8 @@ final class PublishedField
             'role' => $this->role->value,
             'aggregations' => array_map(fn (Aggregation $a) => $a->value, $this->aggregations),
             'format' => $this->format,
+            'description' => $this->description,
+            'options' => $this->options ?: null,
         ];
     }
 }

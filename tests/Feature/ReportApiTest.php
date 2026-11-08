@@ -42,7 +42,7 @@ it('saves a report that compiles and refuses one that does not', function () {
     expect($saved['uuid'])->toBeString()
         ->and($saved['is_owner'])->toBeTrue()
         ->and($saved['visibility'])->toBe('private')
-        ->and($saved['model_version'])->toBe(1)
+        ->and($saved['model_version'])->toBe(app(\Abdalla\ReportGenerator\Semantic\Published\SemanticModelRepository::class)->current()->version)
         ->and($saved['definition']['root'])->toBe('visits');
 
     $this->postJson('/api/report-generator/reports', ['name' => 'Broken', 'definition' => ['root' => 'visits', 'fields' => [['ref' => 'visits.nope', 'as' => 'x']]]])

@@ -14,6 +14,7 @@ use Abdalla\ReportGenerator\Query\Planning\PlannedField;
 use Abdalla\ReportGenerator\Query\Planning\QueryPlan;
 use Abdalla\ReportGenerator\Query\QueryException;
 use Abdalla\ReportGenerator\Security\PolicyContext;
+use Abdalla\ReportGenerator\Security\ScopeContext;
 use Abdalla\ReportGenerator\Security\PolicyRegistry;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Auth\Authenticatable;
@@ -51,13 +52,15 @@ final class QueryCompiler
     private Dialect $dialect;
     private ?Authenticatable $user;
     private int $timeoutMs;
+    private bool $viewAll = false;
 
     public function __construct(private readonly PolicyRegistry $policies)
     {
     }
 
-    public function compile(QueryPlan $plan, Connection $connection, Dialect $dialect, ?Authenticatable $user = null, int $timeoutMs = 0): CompiledQuery
+    public function compile(QueryPlan $plan, Connection $connection, Dialect $dialect, ?Authenticatable $user = null, int $timeoutMs = 0, bool $viewAll = false): CompiledQuery
     {
+        $this->viewAll = $viewAll;
         $this->plan = $plan;
         $this->connection = $connection;
         $this->grammar = $connection->getQueryGrammar();
@@ -274,10 +277,47 @@ final class QueryCompiler
         }
 
         foreach ($tree->nodes() as $node) {
-            $this->policies->apply($query, new PolicyContext($node->dataset->key, $node->alias, $this->user));
+            $this->secure($query, $node);
         }
 
+        $this->applyContext($query, $root);
+
         return $query;
+    }
+
+    /** Policies registered for the dataset, plus the row scope for employee/division topics. */
+    private function secure(Builder $query, JoinNode $node): void
+    {
+        $this->policies->apply($query, new PolicyContext($node->dataset->key, $node->alias, $this->user));
+
+        if (! $this->viewAll) {
+            $context = $this->plan->definition->context;
+            $this->policies->applyScope($query, new ScopeContext($node->dataset, $node->alias, $this->user, $context->from, $context->to, $context->lines));
+        }
+    }
+
+    /** The fixed report filters, through the columns the main topic declares. */
+    private function applyContext(Builder $query, JoinNode $root): void
+    {
+        $context = $this->plan->definition->context;
+        $dataset = $root->dataset;
+
+        if ($context->from !== null && $dataset->dateColumn) {
+            $type = $dataset->field($dataset->dateColumn)?->type ?? DataType::Date;
+            // Date columns compare by day; a date-time column with a day-only "to" includes that whole day.
+            $from = $type === DataType::Date ? substr($context->from, 0, 10) : $context->from;
+            $to = $type === DataType::Date ? substr($context->to, 0, 10) : (strlen($context->to) === 10 ? $context->to.' 23:59:59' : $context->to);
+            $query->whereBetween("{$root->alias}.{$dataset->dateColumn}", [$from, $to]);
+        }
+        foreach ([
+            [$context->lines, $dataset->lineColumn],
+            [$context->divisions, $dataset->divisionColumn],
+            [$context->employees, $dataset->employeeColumn],
+        ] as [$ids, $column]) {
+            if ($ids !== [] && $column) {
+                $query->whereIn("{$root->alias}.{$column}", $ids);
+            }
+        }
     }
 
     private function join(Builder $query, JoinNode $node, string $method): void
@@ -583,7 +623,7 @@ final class QueryCompiler
             $this->join($sub, $node, 'join');
         }
         foreach ([$first, ...$chain] as $node) {
-            $this->policies->apply($sub, new PolicyContext($node->dataset->key, $node->alias, $this->user));
+            $this->secure($sub, $node);
         }
 
         $predicate = $this->predicate($this->column($c->node, $c->field->column), $c->condition, $c->field->type);

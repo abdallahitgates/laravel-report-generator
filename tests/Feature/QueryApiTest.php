@@ -19,11 +19,11 @@ $definition = ['root' => 'visits', 'fields' => [
     ['ref' => 'visits.amount', 'agg' => 'sum', 'as' => 'amount'],
 ]];
 
-it('explains that nothing is published yet', function () use ($definition) {
+it('explains that no topics are registered yet', function () use ($definition) {
     $this->actingAs(new GenericUser(['id' => 1]))
         ->postJson('/api/report-generator/query/rows', ['definition' => $definition])
         ->assertStatus(422)
-        ->assertJsonPath('code', 'MODEL_NOT_PUBLISHED');
+        ->assertJsonPath('code', 'NO_TOPICS');
 });
 
 it('runs a report page', function () use ($definition) {

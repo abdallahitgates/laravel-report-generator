@@ -22,6 +22,7 @@ final class ReportDefinition
         public readonly array $sort = [],
         public readonly ?int $limit = null,
         public readonly bool $subtotals = false,
+        public readonly ReportContext $context = new ReportContext(),
     ) {
     }
 
@@ -72,7 +73,7 @@ final class ReportDefinition
 
         $level = count($keys);
         if ($level >= count($groupColumns)) {
-            return new self($this->root, $this->fields, $filters, $this->sort, $this->limit, false);
+            return new self($this->root, $this->fields, $filters, $this->sort, $this->limit, false, $this->context);
         }
 
         // Group level: the groups opened so far (constant within this level, and the
@@ -104,7 +105,7 @@ final class ReportDefinition
         }
         $sort = array_values(array_filter($this->sort, fn (SortSpec $s) => isset($kept[$s->alias])));
 
-        return new self($this->root, $fields, $filters, $sort ?: [new SortSpec($groupAlias)], $this->limit, false);
+        return new self($this->root, $fields, $filters, $sort ?: [new SortSpec($groupAlias)], $this->limit, false, $this->context);
     }
 
     /** @param  array<string, true>  $kept */

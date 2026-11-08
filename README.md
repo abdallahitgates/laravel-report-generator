@@ -1,16 +1,18 @@
 # abdalla/laravel-report-generator
 
-A semantic-model report engine for Laravel. Point it at any database, let it
-scan the schema, curate the result once, and users build reports (joins,
-filters, grouping, formulas, exports) without writing SQL. Built for large
+A report engine for Laravel. Describe what people may report on as **topics**
+(PHP classes: fields with labels, relations to other topics, and the
+employee / division / line / date columns every report is filtered by), and
+users build reports (joins, filters, grouping, formulas, exports) without
+writing SQL. Built for large
 datasets: work is pushed down to the database, previews are paged on the
 server, and exports stream with constant memory.
 
 The UI ships separately as [`@abdalla/report-generator-vue`](https://github.com/abdallahitgates/report-generator-vue).
 
-> Version **0.1.0**, milestone M3 (report builder). Scanning, Model Studio, the query engine,
-> saved reports and the builder UI are in place. Exports (M4) and report
-> sources (M5) follow.
+> Version **0.2.0** (v2 phase P1a). Topics defined in code replace the
+> database scan and Model Studio of 0.1. The query engine, saved reports and
+> the builder UI are unchanged.
 
 ## Requirements
 
@@ -53,7 +55,7 @@ settings have env variables:
 | `RG_ROUTE_PREFIX` | `api/report-generator` | API prefix. |
 | `RG_AUTH_MIDDLEWARE` | `auth` | Auth middleware for the API, e.g. `auth:api`, `auth:sanctum`. |
 | `RG_AUTHORIZE_BY_DEFAULT` | `false` | Answer for abilities the host has not defined a Gate for. |
-| `RG_PGSQL_SCHEMA` | search_path | PostgreSQL schema to scan. |
+| `RG_PGSQL_SCHEMA` | search_path | PostgreSQL schema `make-topic` reads. |
 
 Without a read replica, create a second connection to the same database with
 a user that only has `SELECT`, and set `RG_DATA_CONNECTION` to it:
@@ -78,11 +80,8 @@ Gate::define('report-generator.model.manage', fn ($user) => $user->is_admin);
 Gate::define('report-generator.report.create', fn ($user) => true);
 Gate::define('report-generator.report.export', fn ($user) => true);
 
-// 2. Row-level security. Runs whenever the dataset is in a query, including
-//    through a join. Always qualify columns with $ctx->column(): the engine
-//    aliases tables in generated SQL.
-ReportGenerator::policy('visits', fn (Builder $q, PolicyContext $ctx) =>
-    $q->whereIn($ctx->column('user_id'), $ctx->user->visibleUserIds()));
+// 2. Which employees / divisions each user may see (see "Row security").
+ReportGenerator::scopeUsing(\App\Reporting\StructureScope::class);
 
 // 3. Existing code-computed reports as datasets (implement ReportSource).
 ReportGenerator::source(\App\Reports\SalesIncentiveSource::class);
@@ -91,43 +90,89 @@ ReportGenerator::source(\App\Reports\SalesIncentiveSource::class);
 Abilities: `report-generator.model.manage`, `report-generator.report.create`,
 `report-generator.report.export`, `report-generator.report.view-all`.
 
-## The semantic model
+## Topics
 
-```bash
-php artisan report-generator:scan       # read the database into the draft model
-php artisan report-generator:publish    # freeze the reviewed draft as a new version
+Topics live in `app/Reporting/Topics` (`topics.paths` in the config) and are
+discovered automatically; `ReportGenerator::topics([...])` registers others.
+Each topic is listed under a tab (`$group`) and starts its own reports.
+
+```php
+namespace App\Reporting\Topics;
+
+use App\ActualVisit;
+use Abdalla\ReportGenerator\Topics\{Field, Relation, Topic};
+
+class ActualVisitsTopic extends Topic
+{
+    public string $model = ActualVisit::class;   // table, key, soft deletes
+    public ?string $group = 'Visits';
+
+    // The fixed filters every report has (Period, Line, Division, Employee),
+    // and the columns the row scope restricts.
+    public ?string $employeeColumn = 'user_id';
+    public ?string $divisionColumn = 'div_id';
+    public ?string $lineColumn = 'line_id';
+    public ?string $dateColumn = 'visit_date';
+
+    public function fields(): array
+    {
+        return [
+            Field::count('Number of visits'),
+            Field::date('visit_date', 'Visit date'),
+            Field::enum('status', 'Status', ['done' => 'Done', 'missed' => 'Missed']),
+            Field::money('amount', 'Amount'),                  // sum, avg, min, max
+            Field::integer('duration', 'Duration')->totals(['sum', 'avg']),
+            Field::text('ll', 'Latitude')->visibleTo('admin'), // per role
+            Field::id('account_id', 'Account ID'),             // hidden, for joins
+        ];
+    }
+
+    public function relations(): array
+    {
+        return [
+            Relation::belongsTo('employee', 'Employee', UsersTopic::class, 'user_id'),
+            Relation::belongsTo('account', 'Account', AccountsTopic::class, 'account_id'),
+            Relation::hasMany('products', 'Products', ActualVisitProductsTopic::class, 'visit_id'),
+        ];
+    }
+}
 ```
 
-A scan reads every table, view, column, index and foreign key, then:
+Draft one from a model, then edit labels and remove what reports should not
+offer:
 
-- **Classifies columns**: numbers like `amount` or `quantity` become measures,
-  dates become time fields, `*_id` columns become keys (hidden, still used for
-  joins). Labels come from column comments, else from the name
-  (`doctor_id` → "Doctor").
-- **Protects data**: columns matching `schema.sensitive_columns` are hidden
-  and need an explicit confirmation to show; unsupported types (binary,
-  arrays, geometry) cannot be shown; `deleted_at` is recorded so deleted rows
-  are filtered out automatically.
-- **Finds relationships** from three sources: foreign keys (confirmed
-  automatically), Eloquent `belongsTo` / `hasOne` / `hasMany` (pending, 90%),
-  and `*_id` naming conventions (pending, 50–70%). Polymorphic pairs are skipped.
-- **Merges, never overwrites**: rescans add new tables and columns and refresh
-  types and row estimates, but keep every label, role, visibility and review
-  decision. Dropped tables and columns are flagged *missing*, not deleted.
+```bash
+php artisan report-generator:make-topic ActualVisits --model="App\ActualVisit" --group=Visits
+```
 
-Users only ever see a **published version**: visible datasets and fields, and
-confirmed relationships. Measured on ProCRM's schema (461 tables, 7 views,
-4,645 columns, MySQL 8): first scan 1.8 s, rescan 0.8 s.
+It reads the table once: columns become fields with types and labels
+(sensitive columns such as passwords are left out), `belongsTo` / `hasOne` /
+`hasMany` methods become relations (commented out until the target topic
+exists), and `user_id`, `div_id` / `line_division_id`, `line_id` and the main
+date are suggested as the filter columns.
+
+- **Keys**: a topic's key is its class name in snake case without `Topic`
+  (`ActualVisitsTopic` → `actual_visits`); set `$key` to keep saved reports
+  working after a rename.
+- **Relations** are declared from either side, and stored once. Builders walk
+  them as a tree up to `topics.max_depth` levels from the report's topic.
+- **Lookups** anyone may read in full: `public bool $public = true`.
+- **Topic permission**: `public ?string $permission = 'reports.sales'` (a
+  Gate ability) hides a topic from users without it.
 
 ## Running reports
 
-A report is a JSON definition. Fields are `dataset.field` refs from the
-published model; the engine works out the joins.
+A report is a JSON definition. Fields are `topic.field` refs; the engine
+works out the joins. `context` holds the fixed report filters: `period` (a
+preset such as `this_month`, `[from, to]` or a parameter) on the topic's
+`$dateColumn`, and `lines` / `divisions` / `employees` ids on its line,
+division and employee columns.
 
 ```json
 {
   "root": "visits",
   "parameters": [{"key": "period", "type": "date_range", "default": "this_quarter"}],
+  "context": {"period": "{{period}}", "lines": [1], "divisions": [], "employees": []},
   "fields": [
     {"ref": "lines.name", "as": "line"},
     {"ref": "visits.visit_date", "grain": "month", "as": "month"},
@@ -201,19 +246,36 @@ published model; the engine works out the joins.
 
 ### Row security
 
-```php
-// Rows a user may see. Applied to every query that touches the dataset,
-// through joins and inside EXISTS filters.
-ReportGenerator::policy('visits', fn (Builder $q, PolicyContext $ctx) =>
-    $q->whereIn($ctx->column('user_id'), $ctx->user->visibleUserIds()));
+The row scope decides which employees and divisions a user sees. It runs on
+every topic that declares an employee, division or line column, wherever the
+topic appears (the main topic, joins, `EXISTS` filters), and gets the report's
+period and lines, because structure assignments change over time:
 
-// Lookup tables anyone who builds reports may read in full.
-ReportGenerator::unrestricted(['products', 'lines', 'specialities']);
+```php
+use Abdalla\ReportGenerator\Contracts\RowScope;
+use Abdalla\ReportGenerator\Security\ScopeContext;
+use Illuminate\Database\Query\Builder;
+
+class StructureScope implements RowScope
+{
+    public function apply(Builder $query, ScopeContext $ctx): void
+    {
+        $users = $ctx->user->visibleUserIds($ctx->lines, $ctx->from, $ctx->to);
+
+        if ($column = $ctx->employeeColumn()) {   // qualified: alias.user_id
+            $query->whereIn($column, $users);
+        } elseif ($column = $ctx->divisionColumn()) {
+            $query->whereIn($column, $ctx->user->visibleDivisionIds($ctx->lines, $ctx->from, $ctx->to));
+        }
+    }
+}
 ```
 
-Deny by default: without the `report-generator.report.view-all` ability a
-user can only query datasets that have a policy or are unrestricted
-(`security.require_row_policies`).
+Users with `report-generator.report.view-all` (admins) skip the scope. Other
+users can only query topics that are scoped (with a scope registered),
+public, covered by a `ReportGenerator::policy()` or listed in
+`ReportGenerator::unrestricted([...])`. Fields marked `visibleTo()` /
+`canSee()` do not exist for anyone else.
 
 ## API
 
@@ -222,18 +284,9 @@ All paths are under the configured prefix (default `api/report-generator`).
 | Method | Path | Ability | Purpose |
 |---|---|---|---|
 | GET | `/meta` | any user | Version, the current user's abilities, registered sources, limits |
-| GET | `/model/status` | manage model | Latest scan, structure changes, current version, unpublished changes |
-| POST | `/model/scan` | manage model | Scan the data connection (one at a time) |
-| GET | `/model/datasets` | manage model | Datasets with field and review counts |
-| GET / PATCH | `/model/datasets/{id}` | manage model | Dataset with fields and relationships / rename, hide, default date |
-| PATCH | `/model/fields/{id}` | manage model | Label, role, format, aggregations, visibility |
-| GET / POST | `/model/relationships` | manage model | List (filter by `status`) / add by hand |
-| PATCH / DELETE | `/model/relationships/{id}` | manage model | Confirm, reject, change cardinality / delete a manual one |
-| POST | `/model/relationships/bulk` | manage model | Confirm or reject many |
-| GET | `/model/versions` | manage model | Published versions |
-| POST | `/model/publish` | manage model | Publish the draft |
-| GET | `/catalog` | create reports | Datasets the user may start a report from |
-| GET | `/catalog?root=visits` | create reports | Datasets reachable from the root, with fields and join path options |
+| GET | `/topics` | manage model | Every topic by tab, with table, filter columns, fields and relations |
+| GET | `/catalog` | create reports | Topics the user may start a report from, by tab |
+| GET | `/catalog?root=visits` | create reports | The topic's relation tree (fields and join path per node), plus a flat list |
 | POST | `/query/validate` | create reports | Check a definition: errors, columns, mode, estimated rows |
 | POST | `/query/rows` | create reports | One page of results (`definition`, `parameters`, `page`, `groups`, `query_id`) |
 | POST | `/query/values` | create reports | Distinct values of a field for filter pickers (`field`, `search`) |
@@ -261,7 +314,7 @@ composer install
 vendor/bin/pest
 ```
 
-The inspector and scan tests always run on SQLite. Point them at real
+The tests always run on SQLite. Point them at real
 databases to cover MySQL and PostgreSQL too:
 
 ```bash
@@ -278,9 +331,16 @@ work lives in [`benchmarks/`](benchmarks).
 ## Releasing
 
 ```bash
-git tag v0.2.0
+git tag v0.3.0
 git push origin main --tags
 ```
 
 Projects pick up the new version with `composer update abdalla/laravel-report-generator`
 (within their constraint, e.g. `^0.1` stays on 0.1.x; change it to `^0.2` to move).
+
+### Upgrading from 0.1
+
+Run the migrations: they drop `rg_datasets`, `rg_fields`, `rg_relationships`,
+`rg_model_versions` and `rg_schema_snapshots`. Create topics with the keys the
+0.1 datasets had (table names) so saved reports keep working; join paths saved
+with 0.1 relationship ids must be picked again.

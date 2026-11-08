@@ -1,0 +1,121 @@
+<?php
+
+namespace Abdalla\ReportGenerator\Topics;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
+
+/**
+ * Something reports can be built on (actual visits, sales, doctors, ...),
+ * declared in the host application's code: its fields with their labels,
+ * how it connects to other topics, and which of its columns hold the
+ * employee, division, line and date every report is filtered by.
+ *
+ *   class ActualVisitsTopic extends Topic
+ *   {
+ *       public string $model = ActualVisit::class;
+ *       public ?string $employeeColumn = 'user_id';
+ *       public ?string $divisionColumn = 'div_id';
+ *
+ *       public function fields(): array { return [Field::date('visit_date', 'Visit date'), ...]; }
+ *       public function relations(): array { return [Relation::belongsTo('employee', 'Employee', UsersTopic::class, 'user_id'), ...]; }
+ *   }
+ */
+abstract class Topic
+{
+    /** @var class-string<Model> Eloquent model: gives the table, primary key and soft-delete column. */
+    public string $model;
+
+    /** Stable identifier used in saved reports. Default: snake_case class name without "Topic". */
+    public ?string $key = null;
+
+    public ?string $label = null;
+
+    /** Tab the topic is listed under, e.g. "Structure" for lines, divisions and their links. */
+    public ?string $group = null;
+
+    public ?string $description = null;
+
+    /** Label of the built-in row count, e.g. "Number of visits". */
+    public ?string $countLabel = null;
+
+    /** Columns every report on this topic is filtered and secured by. */
+    public ?string $employeeColumn = null;
+
+    public ?string $divisionColumn = null;
+
+    public ?string $lineColumn = null;
+
+    public ?string $dateColumn = null;
+
+    /** Lookup data anyone building reports may read in full (specialities, products). */
+    public bool $public = false;
+
+    /** Gate ability a user needs to report on this topic (admins with view-all always can). */
+    public ?string $permission = null;
+
+    private ?Model $instance = null;
+
+    /** @return list<Field> */
+    abstract public function fields(): array;
+
+    /** @return list<Relation> */
+    public function relations(): array
+    {
+        return [];
+    }
+
+    final public function key(): string
+    {
+        if ($this->key !== null) {
+            return $this->key;
+        }
+
+        $base = class_basename(static::class);
+        $base = str_ends_with($base, 'Topic') && $base !== 'Topic' ? substr($base, 0, -5) : $base;
+
+        return Str::snake($base);
+    }
+
+    public function label(): string
+    {
+        return $this->label ?? Str::headline($this->key());
+    }
+
+    public function group(): string
+    {
+        return $this->group ?? $this->label();
+    }
+
+    public function countLabel(): string
+    {
+        return $this->countLabel ?? 'Number of '.Str::lower($this->label());
+    }
+
+    public function model(): Model
+    {
+        if (! isset($this->model) || ! is_subclass_of($this->model, Model::class)) {
+            throw new InvalidTopicException(static::class.' must set $model to an Eloquent model class.');
+        }
+
+        return $this->instance ??= new ($this->model)();
+    }
+
+    public function table(): string
+    {
+        return $this->model()->getTable();
+    }
+
+    public function primaryKey(): string
+    {
+        return $this->model()->getKeyName();
+    }
+
+    public function softDeleteColumn(): ?string
+    {
+        $model = $this->model();
+
+        return in_array(SoftDeletes::class, class_uses_recursive($model), true) ? $model->getDeletedAtColumn() : null;
+    }
+}

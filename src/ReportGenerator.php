@@ -7,6 +7,9 @@ use Illuminate\Contracts\Auth\Access\Gate;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Abdalla\ReportGenerator\Contracts\ReportSource;
 use Abdalla\ReportGenerator\Contracts\RowPolicy;
+use Abdalla\ReportGenerator\Contracts\RowScope;
+use Abdalla\ReportGenerator\Topics\Topic;
+use Abdalla\ReportGenerator\Topics\TopicRegistry;
 use Abdalla\ReportGenerator\Enums\Ability;
 use Abdalla\ReportGenerator\Security\PolicyRegistry;
 use Abdalla\ReportGenerator\Sources\SourceRegistry;
@@ -29,7 +32,44 @@ class ReportGenerator
         private readonly PolicyRegistry $policies,
         private readonly SourceRegistry $sources,
         private readonly Gate $gate,
+        private readonly TopicRegistry $topics,
     ) {
+    }
+
+    /**
+     * Register topic classes (in addition to the ones discovered from
+     * config report-generator.topics.paths).
+     *
+     * @param  iterable<class-string<Topic>|Topic>  $topics
+     */
+    public function topics(iterable $topics): static
+    {
+        $this->topics->register($topics);
+
+        return $this;
+    }
+
+    /**
+     * The rule for which rows of employee/division topics a user may see.
+     *
+     * @param  RowScope|class-string<RowScope>|Closure(\Illuminate\Database\Query\Builder, Security\ScopeContext): void  $scope
+     */
+    public function scopeUsing(RowScope|Closure|string $scope): static
+    {
+        if (is_string($scope)) {
+            $scope = \Illuminate\Container\Container::getInstance()->make($scope);
+            if (! $scope instanceof RowScope) {
+                throw new \InvalidArgumentException($scope::class.' must implement '.RowScope::class.'.');
+            }
+        }
+        $this->policies->setScope($scope);
+
+        return $this;
+    }
+
+    public function topicRegistry(): TopicRegistry
+    {
+        return $this->topics;
     }
 
     /**

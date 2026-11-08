@@ -2,11 +2,10 @@
 
 namespace Abdalla\ReportGenerator\Tests\Support;
 
-use Abdalla\ReportGenerator\Models\Dataset;
-use Abdalla\ReportGenerator\Models\Relationship;
-use Abdalla\ReportGenerator\Schema\SchemaScanner;
-use Abdalla\ReportGenerator\Semantic\ModelPublisher;
+use Abdalla\ReportGenerator\Facades\ReportGenerator;
 use Abdalla\ReportGenerator\Semantic\Published\SemanticModelRepository;
+use Abdalla\ReportGenerator\Topics\TopicModelBuilder;
+use Abdalla\ReportGenerator\Topics\TopicRegistry;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -105,25 +104,32 @@ final class EngineFixture
         ]);
     }
 
-    /** Scan, confirm every relationship, show every dataset, publish. */
+    public const TOPICS = [
+        \Abdalla\ReportGenerator\Tests\Fixtures\Engine\LinesTopic::class,
+        \Abdalla\ReportGenerator\Tests\Fixtures\Engine\SpecialitiesTopic::class,
+        \Abdalla\ReportGenerator\Tests\Fixtures\Engine\UsersTopic::class,
+        \Abdalla\ReportGenerator\Tests\Fixtures\Engine\DoctorsTopic::class,
+        \Abdalla\ReportGenerator\Tests\Fixtures\Engine\VisitsTopic::class,
+        \Abdalla\ReportGenerator\Tests\Fixtures\Engine\SalesTopic::class,
+    ];
+
+    /** Point the engine at the connection and register the fixture topics. */
     public static function publish(string $connection): void
     {
         config()->set('report-generator.data_connection', $connection);
-        config()->set('report-generator.schema.eloquent.enabled', false);
+        config()->set('report-generator.topics.paths', []);
 
-        app(SchemaScanner::class)->scan();
-        Relationship::query()->update(['status' => Relationship::CONFIRMED]);
-        Dataset::query()->whereNotIn('key', self::TABLES)->update(['is_hidden' => true]);
-        app(ModelPublisher::class)->publish();
+        app(TopicRegistry::class)->forget();
+        ReportGenerator::topics(self::TOPICS);
         app(SemanticModelRepository::class)->forget();
     }
 
+    /** Id of the many-to-one edge {$from}.{$column} -> the table the column points at. */
     public static function relationshipId(string $from, string $column): int
     {
-        return Relationship::query()
-            ->whereHas('fromDataset', fn ($q) => $q->where('key', $from))
-            ->where('from_column', $column)
-            ->value('id');
+        $to = ['user_id' => 'users', 'doctor_id' => 'doctors', 'line_id' => 'lines', 'speciality_id' => 'specialities'][$column];
+
+        return TopicModelBuilder::id($from, $column, $to, 'id');
     }
 
     public static function drop(string $connection): void
