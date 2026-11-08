@@ -222,6 +222,34 @@ it('limits employees to their own rows through the row scope and lets admins see
         ->and(countVisits([]))->toBe(8);
 });
 
+it('lets lookup topics be joined but never be the main topic', function () {
+    \Abdalla\ReportGenerator\Tests\Fixtures\Engine\SalesTopic::$asLookup = true;
+    try {
+        fixtureEngine();
+        ReportGenerator::unrestricted(['doctors']);
+        $rep = new GenericUser(['id' => 3]);
+        $engine = app(QueryEngine::class);
+
+        $joined = $engine->rows(['root' => 'doctors', 'fields' => [
+            ['ref' => 'doctors.name', 'as' => 'doctor'],
+            ['ref' => 'sales.value', 'agg' => 'sum', 'as' => 'sales'],
+        ], 'sort' => [['field' => 'doctor', 'dir' => 'asc']]], [], $rep, 0, 10);
+        expect(array_map(fn ($v) => $v === null ? null : (float) $v, array_column($joined['rows'], 'sales')))->toBe([1500.0, null, 300.0]);
+
+        $error = null;
+        try {
+            $engine->rows(['root' => 'sales', 'fields' => [['ref' => 'sales.value', 'agg' => 'sum', 'as' => 'v']]], [], $rep, 0, 10);
+        } catch (\Abdalla\ReportGenerator\Query\QueryException $e) {
+            $error = $e;
+        }
+        expect($error?->errorCode)->toBe('DATASET_FORBIDDEN')
+            ->and(array_column($engine->catalog(null, $rep)['datasets'], 'key'))->toBe(['doctors'])
+            ->and(array_column($engine->catalog(null, new GenericUser(['id' => 1]))['datasets'], 'key'))->toContain('sales');
+    } finally {
+        \Abdalla\ReportGenerator\Tests\Fixtures\Engine\SalesTopic::$asLookup = false;
+    }
+});
+
 it('keeps topics away from users who are neither scoped, allowed nor admins', function () {
     fixtureEngine();
 

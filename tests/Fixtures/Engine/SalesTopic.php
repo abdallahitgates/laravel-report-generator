@@ -14,6 +14,14 @@ class SalesTopic extends Topic
 
     public ?string $dateColumn = 'sale_date';
 
+    /** Lets a test turn sales into a lookup topic. */
+    public static bool $asLookup = false;
+
+    public function __construct()
+    {
+        $this->lookup = static::$asLookup;
+    }
+
     public function fields(): array
     {
         return [

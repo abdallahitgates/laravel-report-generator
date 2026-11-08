@@ -62,6 +62,13 @@ abstract class Topic
     /** Lookup data anyone building reports may read in full (specialities, products). */
     public bool $public = false;
 
+    /**
+     * Readable through a relation from a topic the user may read, but not
+     * as a report's main topic: details of rows the user already sees
+     * (the distributor sale behind a division's sales line).
+     */
+    public bool $lookup = false;
+
     /** Gate ability a user needs to report on this topic (admins with view-all always can). */
     public ?string $permission = null;
 

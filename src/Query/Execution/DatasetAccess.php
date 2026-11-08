@@ -16,7 +16,8 @@ use Illuminate\Contracts\Auth\Authenticatable;
  * permission must pass, and its rows must be protected by something:
  * the row scope (topics with an employee or division column), a policy,
  * or the topic being public lookup data. A topic with none of these is
- * hidden rather than leaked.
+ * hidden rather than leaked. Lookup topics are readable only when joined
+ * from a topic the user may read, never as the main topic.
  */
 final class DatasetAccess
 {
@@ -35,7 +36,8 @@ final class DatasetAccess
         return $this->viewAll ??= $this->generator->allows($this->user, Ability::ViewAllReports);
     }
 
-    public function allows(string $dataset): bool
+    /** @param  bool  $asRoot  as the report's main topic, rather than reached through a relation */
+    public function allows(string $dataset, bool $asRoot = false): bool
     {
         $published = $this->model->dataset($dataset);
         if ($published === null) {
@@ -52,6 +54,7 @@ final class DatasetAccess
         }
 
         return $published->public
+            || ($published->lookup && ! $asRoot)
             || ($published->isScoped() && $this->policies->hasScope())
             || $this->policies->has($dataset)
             || $this->policies->isUnrestricted($dataset);
@@ -59,8 +62,8 @@ final class DatasetAccess
 
     public function asserter(): \Closure
     {
-        return function (string $dataset) {
-            if (! $this->allows($dataset)) {
+        return function (string $dataset, bool $asRoot = false) {
+            if (! $this->allows($dataset, $asRoot)) {
                 $label = $this->model->dataset($dataset)?->label ?? $dataset;
                 throw new QueryException('DATASET_FORBIDDEN', "You do not have access to {$label}.", status: 403, details: ['dataset' => $dataset]);
             }

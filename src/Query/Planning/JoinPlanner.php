@@ -22,7 +22,7 @@ final class JoinPlanner
     private int $nextAlias = 1;
     private JoinNode $root;
 
-    /** @param  Closure(string): void  $assertAllowed  throws when the user may not read a dataset */
+    /** @param  Closure(string, bool): void  $assertAllowed  throws when the user may not read a dataset (as the root, or joined) */
     public function __construct(
         private readonly SemanticModel $model,
         private readonly JoinGraph $graph,
@@ -31,7 +31,7 @@ final class JoinPlanner
     ) {
         $dataset = $model->dataset($root)
             ?? throw new QueryException('UNKNOWN_DATASET', "There is no dataset \"{$root}\" in the published data model.", 'root');
-        ($this->assertAllowed)($root);
+        ($this->assertAllowed)($root, true);
         $this->root = $this->nodes['root'] = new JoinNode('root', 't0', $dataset, []);
     }
 

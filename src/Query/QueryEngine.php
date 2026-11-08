@@ -245,7 +245,7 @@ final class QueryEngine
         $access = new DatasetAccess($this->generator, $this->policies, $user, $model);
 
         if ($root === null) {
-            $allowed = array_values(array_filter($model->datasets, fn (PublishedDataset $d) => $access->allows($d->key)));
+            $allowed = array_values(array_filter($model->datasets, fn (PublishedDataset $d) => $access->allows($d->key, true)));
             $groups = [];
             foreach ($allowed as $dataset) {
                 $groups[$dataset->group ?? $dataset->label][] = $this->topicSummary($dataset);
@@ -258,7 +258,7 @@ final class QueryEngine
             ];
         }
 
-        $access->asserter()($root);
+        $access->asserter()($root, true);
         $model->dataset($root) ?? throw new QueryException('UNKNOWN_DATASET', "There is no topic \"{$root}\".", 'root');
 
         $tree = $this->topicNode($this->topics->get($root), [], [], 0, false, $access, $model, null);
@@ -295,6 +295,7 @@ final class QueryEngine
                 'class' => $topic::class,
                 'permission' => $topic->permission,
                 'public' => $topic->public,
+                'lookup' => $topic->lookup,
                 'conditions' => (object) $topic->conditions(),
                 'columns' => [
                     'period' => $topic->validFromColumn ? trim($topic->validFromColumn.' – '.$topic->validToColumn, ' –') : $topic->dateColumn,

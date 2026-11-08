@@ -73,6 +73,7 @@ final class TopicModelBuilder
                 validFromColumn: $topic->validFromColumn,
                 validToColumn: $topic->validToColumn,
                 conditions: $topic->conditions(),
+                lookup: $topic->lookup,
             );
         }
 

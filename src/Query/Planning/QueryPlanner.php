@@ -26,7 +26,7 @@ final class QueryPlanner
 
     private const STRING_OPERATORS = ['contains', 'not_contains', 'starts_with', 'ends_with'];
 
-    /** @param  Closure(string): void  $assertAllowed */
+    /** @param  Closure(string, bool): void  $assertAllowed */
     public function plan(ReportDefinition $definition, SemanticModel $model, Closure $assertAllowed): QueryPlan
     {
         $joins = new JoinPlanner($model, new JoinGraph($model), $definition->root, $assertAllowed);

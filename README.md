@@ -178,6 +178,9 @@ date are suggested as the filter columns.
   }
   ```
 - **Lookups** anyone may read in full: `public bool $public = true`.
+- **Joined-only topics**: `public bool $lookup = true` lets users read a
+  topic through a relation from a topic they may read (the distributor sale
+  behind a division's sales line) but not start a report from it.
 - **Topic permission**: `public ?string $permission = 'reports.sales'` (a
   Gate ability) hides a topic from users without it.
 

@@ -30,6 +30,7 @@ final class PublishedDataset
         public readonly ?string $validFromColumn = null,
         public readonly ?string $validToColumn = null,
         public readonly array $conditions = [],
+        public readonly bool $lookup = false,
     ) {
     }
 
