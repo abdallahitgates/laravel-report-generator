@@ -154,6 +154,45 @@ it('keeps rows valid at any time in the period for topics with a validity span',
     $schema->drop('assignments');
 });
 
+it('keeps only the rows a topic is made of, wherever it appears', function () {
+    EngineFixture::create('testing');
+    EngineFixture::publish('testing');
+    ReportGenerator::topics([
+        \Abdalla\ReportGenerator\Tests\Fixtures\Topics\OutcomeVisitsTopic::class,
+        \Abdalla\ReportGenerator\Tests\Fixtures\Topics\KolDoctorsTopic::class,
+        \Abdalla\ReportGenerator\Tests\Fixtures\Topics\UnratedVisitsTopic::class,
+    ]);
+    app(SemanticModelRepository::class)->forget();
+    $engine = app(QueryEngine::class);
+    $admin = new GenericUser(['id' => 1]);
+    $count = fn (string $root) => (int) $engine->rows(['root' => $root, 'fields' => [['ref' => "{$root}.__rows", 'agg' => 'count', 'as' => 'n']]], [], $admin, 0, 10)['rows'][0]['n'];
+
+    expect($count('outcome_visits'))->toBe(7)
+        ->and($count('unrated_visits'))->toBe(1)
+        ->and($count('kol_doctors'))->toBe(1);
+
+    // Joined: visits to doctors who are not KOLs stay, without a doctor.
+    $result = $engine->rows(['root' => 'outcome_visits', 'fields' => [
+        ['ref' => 'kol_doctors.name', 'as' => 'kol'],
+        ['ref' => 'outcome_visits.__rows', 'agg' => 'count', 'as' => 'n'],
+    ]], [], $admin, 0, 10);
+    expect(keyedRows($result, 'kol', 'n'))->toBe(['(none)' => 5, 'Dr A' => 2]);
+
+    // Filter pickers only offer values of the topic's rows.
+    expect($engine->values('outcome_visits.status', '', 10, $admin))->toBe(['done', 'missed']);
+});
+
+function keyedRows(array $result, string $key, string $value): array
+{
+    $out = [];
+    foreach ($result['rows'] as $row) {
+        $out[$row[$key] ?? '(none)'] = (int) $row[$value];
+    }
+    ksort($out);
+
+    return $out;
+}
+
 it('rejects a malformed period', function () {
     fixtureEngine();
 

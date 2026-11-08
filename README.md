@@ -161,6 +161,22 @@ date are suggested as the filter columns.
   `$validToColumn = 'to_date'` instead of `$dateColumn`: the report period
   then keeps rows valid at any time in it (an empty "to" means still valid).
   `make-topic` sets them when a table has both columns.
+- **Fixed conditions**: `conditions()` returns `column => value` pairs every
+  row of the topic meets (a list means IN, `null` means IS NULL), applied
+  wherever the topic appears, like soft deletes. One polymorphic table can
+  then back several topics:
+
+  ```php
+  class PlanVisitApprovalsTopic extends Topic
+  {
+      public string $model = PlanVisitDetails::class;
+
+      public function conditions(): array
+      {
+          return ['visitable_type' => PlanVisit::class];
+      }
+  }
+  ```
 - **Lookups** anyone may read in full: `public bool $public = true`.
 - **Topic permission**: `public ?string $permission = 'reports.sales'` (a
   Gate ability) hides a topic from users without it.

@@ -70,6 +70,19 @@ abstract class Topic
     /** @return list<Field> */
     abstract public function fields(): array;
 
+    /**
+     * Fixed conditions every row of the topic meets, applied wherever the
+     * topic appears. Lets one table back several topics, e.g. approvals of
+     * plan visits vs vacations in a polymorphic table:
+     *   return ['visitable_type' => PlanVisit::class];
+     *
+     * @return array<string, scalar|list<scalar>|null>  column => value, list of values, or null for IS NULL
+     */
+    public function conditions(): array
+    {
+        return [];
+    }
+
     /** @return list<Relation> */
     public function relations(): array
     {

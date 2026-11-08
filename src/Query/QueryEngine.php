@@ -212,9 +212,7 @@ final class QueryEngine
             ->orderByRaw($connection->getQueryGrammar()->wrap('value').' asc')
             ->limit(max(1, min($limit, 200)));
 
-        if ($dataset->softDeleteColumn) {
-            $query->whereNull("t0.{$dataset->softDeleteColumn}");
-        }
+        $dataset->constrain($query, 't0');
         $this->policies->apply($query, new PolicyContext($dataset->key, 't0', $user));
         if (! $access->viewAll()) {
             // A picker never offers values from rows the user may not see.
@@ -297,6 +295,7 @@ final class QueryEngine
                 'class' => $topic::class,
                 'permission' => $topic->permission,
                 'public' => $topic->public,
+                'conditions' => (object) $topic->conditions(),
                 'columns' => [
                     'period' => $topic->validFromColumn ? trim($topic->validFromColumn.' – '.$topic->validToColumn, ' –') : $topic->dateColumn,
                     'line' => $topic->lineColumn,

@@ -72,6 +72,7 @@ final class TopicModelBuilder
                 permission: $topic->permission,
                 validFromColumn: $topic->validFromColumn,
                 validToColumn: $topic->validToColumn,
+                conditions: $topic->conditions(),
             );
         }
 
@@ -134,6 +135,7 @@ final class TopicModelBuilder
         foreach ($topics as $key => $topic) {
             $shape[$key] = [
                 $topic->table(),
+                $topic->conditions(),
                 array_map(fn (Field $f) => [$f->keyName(), $f->column, $f->type()->value], $topic->fields()),
                 array_map(fn (Relation $r) => [$r->name, $r->topic, $r->foreignKey, $r->otherKey], $topic->relations()),
             ];

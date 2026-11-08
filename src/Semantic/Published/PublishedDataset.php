@@ -7,6 +7,7 @@ final class PublishedDataset
     /**
      * @param  array<string, PublishedField>  $fields  by key
      * @param  list<string>  $primaryKey
+     * @param  array<string, scalar|list<scalar>|null>  $conditions  column => value(s) every row has
      */
     public function __construct(
         public readonly string $key,
@@ -28,7 +29,27 @@ final class PublishedDataset
         public readonly ?string $permission = null,
         public readonly ?string $validFromColumn = null,
         public readonly ?string $validToColumn = null,
+        public readonly array $conditions = [],
     ) {
+    }
+
+    /**
+     * Restricts a query to the rows this topic is made of: not soft-deleted,
+     * and matching the topic's fixed conditions. On a join, pass the
+     * JoinClause: rows pointing at excluded lookup rows are kept.
+     */
+    public function constrain(\Illuminate\Database\Query\Builder $query, string $alias): void
+    {
+        if ($this->softDeleteColumn) {
+            $query->whereNull("{$alias}.{$this->softDeleteColumn}");
+        }
+        foreach ($this->conditions as $column => $value) {
+            match (true) {
+                $value === null => $query->whereNull("{$alias}.{$column}"),
+                is_array($value) => $query->whereIn("{$alias}.{$column}", $value),
+                default => $query->where("{$alias}.{$column}", '=', $value),
+            };
+        }
     }
 
     /** Whether reports on this dataset are cut by employee and/or division (and so by the row scope). */

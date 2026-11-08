@@ -266,9 +266,7 @@ final class QueryCompiler
         $root = $tree->root();
         $query = $this->connection->query()->from($this->tableRef($root));
 
-        if ($column = $root->dataset->softDeleteColumn) {
-            $query->whereNull("{$root->alias}.{$column}");
-        }
+        $root->dataset->constrain($query, $root->alias);
 
         foreach ($tree->nodes() as $node) {
             if ($node->isRoot()) {
@@ -346,14 +344,10 @@ final class QueryCompiler
     {
         $parent = $node->parent;
         $step = $node->step;
-        $softDelete = $node->dataset->softDeleteColumn;
-
-        $query->{$method}($this->tableRef($node), function (JoinClause $join) use ($parent, $node, $step, $softDelete) {
+        $query->{$method}($this->tableRef($node), function (JoinClause $join) use ($parent, $node, $step) {
             $join->on("{$parent->alias}.{$step->sourceColumn()}", '=', "{$node->alias}.{$step->targetColumn()}");
-            // Deleted lookup rows disappear from the join without hiding the rows that point at them.
-            if ($softDelete) {
-                $join->whereNull("{$node->alias}.{$softDelete}");
-            }
+            // Deleted or excluded lookup rows disappear from the join without hiding the rows that point at them.
+            $node->dataset->constrain($join, $node->alias);
         });
     }
 
@@ -638,9 +632,7 @@ final class QueryCompiler
 
         $sub = $this->connection->query()->selectRaw('1')->from($this->tableRef($first));
         $sub->whereColumn("{$first->alias}.{$first->step->targetColumn()}", '=', "{$anchor->alias}.{$first->step->sourceColumn()}");
-        if ($column = $first->dataset->softDeleteColumn) {
-            $sub->whereNull("{$first->alias}.{$column}");
-        }
+        $first->dataset->constrain($sub, $first->alias);
         foreach ($chain as $node) {
             $this->join($sub, $node, 'join');
         }

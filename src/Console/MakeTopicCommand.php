@@ -72,6 +72,10 @@ class MakeTopicCommand extends Command
             'lineColumn' => in_array('line_id', $columns, true) ? 'line_id' : null,
             'dateColumn' => $draft->defaultTimeField,
         ]);
+        // Record timestamps say when a row was typed in, not what it is about.
+        if (in_array($properties['dateColumn'] ?? null, ['created_at', 'updated_at'], true)) {
+            unset($properties['dateColumn']);
+        }
         // Assignments valid over a span: the period keeps rows valid at any time in it.
         if (in_array('from_date', $columns, true) && in_array('to_date', $columns, true)) {
             unset($properties['dateColumn']);
