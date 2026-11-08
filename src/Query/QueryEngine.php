@@ -297,6 +297,12 @@ final class QueryEngine
                 'class' => $topic::class,
                 'permission' => $topic->permission,
                 'public' => $topic->public,
+                'columns' => [
+                    'period' => $topic->dateColumn,
+                    'line' => $topic->lineColumn,
+                    'division' => $topic->divisionColumn,
+                    'employee' => $topic->employeeColumn,
+                ],
                 'fields' => $this->fieldList($dataset),
                 'relations' => array_map(fn (Relation $r) => [
                     'name' => $r->name,

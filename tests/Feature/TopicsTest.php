@@ -207,6 +207,7 @@ it('describes every topic for the admin page', function () {
     expect($visits['key'])->toBe('visits')
         ->and($visits['table'])->toBe('visits')
         ->and($visits['filters'])->toBe(['period' => true, 'line' => false, 'division' => false, 'employee' => true])
+        ->and($visits['columns'])->toBe(['period' => 'visit_date', 'line' => null, 'division' => null, 'employee' => 'user_id'])
         ->and(array_column($visits['relations'], 'topic'))->toBe(['users', 'doctors'])
         ->and(collect($visits['fields'])->firstWhere('key', 'status')['options'])->toBe(['done' => 'Done', 'missed' => 'Missed']);
 });
