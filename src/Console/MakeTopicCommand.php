@@ -63,7 +63,7 @@ class MakeTopicCommand extends Command
 
         $classifier = new FieldClassifier((array) config('report-generator.schema.sensitive_columns', []));
         $draft = $classifier->dataset($table, Str::snake(Str::beforeLast($class, 'Topic')));
-        $label = Str::headline(Str::beforeLast($class, 'Topic'));
+        $label = Str::plural(Str::headline(Str::beforeLast($class, 'Topic')));
 
         $columns = array_keys($table->columns);
         $properties = array_filter([
@@ -72,6 +72,11 @@ class MakeTopicCommand extends Command
             'lineColumn' => in_array('line_id', $columns, true) ? 'line_id' : null,
             'dateColumn' => $draft->defaultTimeField,
         ]);
+        // Assignments valid over a span: the period keeps rows valid at any time in it.
+        if (in_array('from_date', $columns, true) && in_array('to_date', $columns, true)) {
+            unset($properties['dateColumn']);
+            $properties += ['validFromColumn' => 'from_date', 'validToColumn' => 'to_date'];
+        }
 
         $relations = [];
         foreach ($scanner->relationsOf($modelClass) as $relation) {

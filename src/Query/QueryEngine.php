@@ -298,7 +298,7 @@ final class QueryEngine
                 'permission' => $topic->permission,
                 'public' => $topic->public,
                 'columns' => [
-                    'period' => $topic->dateColumn,
+                    'period' => $topic->validFromColumn ? trim($topic->validFromColumn.' – '.$topic->validToColumn, ' –') : $topic->dateColumn,
                     'line' => $topic->lineColumn,
                     'division' => $topic->divisionColumn,
                     'employee' => $topic->employeeColumn,
@@ -341,7 +341,7 @@ final class QueryEngine
             'fields_count' => count(array_filter($dataset->fields, fn ($f) => ! $f->hidden)),
             'default_time_field' => $dataset->defaultTimeField,
             'filters' => [
-                'period' => $dataset->dateColumn !== null,
+                'period' => $dataset->dateColumn !== null || $dataset->validFromColumn !== null,
                 'line' => $dataset->lineColumn !== null,
                 'division' => $dataset->divisionColumn !== null,
                 'employee' => $dataset->employeeColumn !== null,

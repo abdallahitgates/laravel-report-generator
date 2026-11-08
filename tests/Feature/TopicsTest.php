@@ -123,6 +123,37 @@ it('filters every report by the period, lines and employees of its main topic', 
     expect(array_column($users['rows'], 'name'))->toBe(['Ali', 'Mona']);
 });
 
+it('keeps rows valid at any time in the period for topics with a validity span', function () {
+    $schema = \Illuminate\Support\Facades\Schema::connection('testing');
+    $schema->dropIfExists('assignments');
+    $schema->create('assignments', function (\Illuminate\Database\Schema\Blueprint $t) {
+        $t->id();
+        $t->unsignedBigInteger('user_id');
+        $t->date('from_date');
+        $t->dateTime('to_date')->nullable();
+    });
+    \Illuminate\Support\Facades\DB::table('assignments')->insert([
+        ['id' => 1, 'user_id' => 1, 'from_date' => '2025-01-01', 'to_date' => '2025-12-31 23:59:59'],
+        ['id' => 2, 'user_id' => 1, 'from_date' => '2026-01-15', 'to_date' => null],
+        ['id' => 3, 'user_id' => 2, 'from_date' => '2026-03-01', 'to_date' => '2026-03-31 00:00:00'],
+        ['id' => 4, 'user_id' => 2, 'from_date' => '2024-01-01', 'to_date' => '2024-06-30 00:00:00'],
+    ]);
+    config()->set('report-generator.data_connection', 'testing');
+    ReportGenerator::topics([\Abdalla\ReportGenerator\Tests\Fixtures\Topics\AssignmentsTopic::class]);
+
+    $ids = fn (array $period) => array_map('intval', array_column(app(QueryEngine::class)->rows(
+        ['root' => 'assignments', 'fields' => [['ref' => 'assignments.id', 'as' => 'id']], 'sort' => [['field' => 'id', 'dir' => 'asc']], 'context' => ['period' => $period]],
+        [], new GenericUser(['id' => 1]), 0, 10,
+    )['rows'], 'id'));
+
+    expect($ids(['2026-01-01', '2026-01-31']))->toBe([2])
+        ->and($ids(['2025-12-31', '2026-03-01']))->toBe([1, 2, 3])
+        ->and($ids(['2024-06-30', '2024-06-30']))->toBe([4])
+        ->and(app(QueryEngine::class)->catalog(null, new GenericUser(['id' => 1]))['datasets'][0]['filters']['period'])->toBeTrue();
+
+    $schema->drop('assignments');
+});
+
 it('rejects a malformed period', function () {
     fixtureEngine();
 

@@ -156,6 +156,11 @@ date are suggested as the filter columns.
   working after a rename.
 - **Relations** are declared from either side, and stored once. Builders walk
   them as a tree up to `topics.max_depth` levels from the report's topic.
+- **Validity spans**: for rows valid from one date to another (structure
+  assignments), set `$validFromColumn = 'from_date'` and
+  `$validToColumn = 'to_date'` instead of `$dateColumn`: the report period
+  then keeps rows valid at any time in it (an empty "to" means still valid).
+  `make-topic` sets them when a table has both columns.
 - **Lookups** anyone may read in full: `public bool $public = true`.
 - **Topic permission**: `public ?string $permission = 'reports.sales'` (a
   Gate ability) hides a topic from users without it.
@@ -247,7 +252,7 @@ division and employee columns.
 ### Row security
 
 The row scope decides which employees and divisions a user sees. It runs on
-every topic that declares an employee, division or line column, wherever the
+every topic that declares an employee or division column, wherever the
 topic appears (the main topic, joins, `EXISTS` filters), and gets the report's
 period and lines, because structure assignments change over time:
 

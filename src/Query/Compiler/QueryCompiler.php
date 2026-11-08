@@ -14,6 +14,7 @@ use Abdalla\ReportGenerator\Query\Planning\PlannedField;
 use Abdalla\ReportGenerator\Query\Planning\QueryPlan;
 use Abdalla\ReportGenerator\Query\QueryException;
 use Abdalla\ReportGenerator\Security\PolicyContext;
+use Abdalla\ReportGenerator\Semantic\Published\PublishedDataset;
 use Abdalla\ReportGenerator\Security\ScopeContext;
 use Abdalla\ReportGenerator\Security\PolicyRegistry;
 use Carbon\CarbonImmutable;
@@ -296,17 +297,38 @@ final class QueryCompiler
         }
     }
 
+    /**
+     * The period as the column compares it: date columns by day; a date-time
+     * column with a day-only "to" includes that whole day.
+     *
+     * @return array{0: string, 1: string}
+     */
+    private function contextBounds(PublishedDataset $dataset, string $column, string $from, string $to): array
+    {
+        $type = $dataset->field($column)?->type ?? DataType::Date;
+
+        return $type === DataType::Date
+            ? [substr($from, 0, 10), substr($to, 0, 10)]
+            : [$from, strlen($to) === 10 ? $to.' 23:59:59' : $to];
+    }
+
     /** The fixed report filters, through the columns the main topic declares. */
     private function applyContext(Builder $query, JoinNode $root): void
     {
         $context = $this->plan->definition->context;
         $dataset = $root->dataset;
 
-        if ($context->from !== null && $dataset->dateColumn) {
-            $type = $dataset->field($dataset->dateColumn)?->type ?? DataType::Date;
-            // Date columns compare by day; a date-time column with a day-only "to" includes that whole day.
-            $from = $type === DataType::Date ? substr($context->from, 0, 10) : $context->from;
-            $to = $type === DataType::Date ? substr($context->to, 0, 10) : (strlen($context->to) === 10 ? $context->to.' 23:59:59' : $context->to);
+        if ($context->from !== null && $dataset->validFromColumn) {
+            // Valid at any time in the period: overlapping spans, open-ended "to".
+            [$from, $to] = $this->contextBounds($dataset, $dataset->validFromColumn, $context->from, $context->to);
+            $query->where("{$root->alias}.{$dataset->validFromColumn}", '<=', $to);
+            if ($dataset->validToColumn) {
+                $toColumn = "{$root->alias}.{$dataset->validToColumn}";
+                [$from] = $this->contextBounds($dataset, $dataset->validToColumn, $context->from, $context->to);
+                $query->where(fn (Builder $q) => $q->whereNull($toColumn)->orWhere($toColumn, '>=', $from));
+            }
+        } elseif ($context->from !== null && $dataset->dateColumn) {
+            [$from, $to] = $this->contextBounds($dataset, $dataset->dateColumn, $context->from, $context->to);
             $query->whereBetween("{$root->alias}.{$dataset->dateColumn}", [$from, $to]);
         }
         foreach ([

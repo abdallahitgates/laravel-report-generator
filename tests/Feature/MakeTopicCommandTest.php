@@ -34,6 +34,7 @@ it('drafts a topic class from an Eloquent model', function () {
         ->toContain("public ?string \$group = 'Visits';")
         ->toContain("public ?string \$employeeColumn = 'user_id';")
         ->toContain("public ?string \$dateColumn = 'visit_date';")
+        ->toContain("public ?string \$label = 'Visits';")
         ->toContain("Field::count('Number of visits'),")
         ->toContain("Field::date('visit_date',")
         ->toContain("Field::longText('notes',")

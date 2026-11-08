@@ -26,6 +26,8 @@ final class PublishedDataset
         public readonly ?string $dateColumn = null,
         public readonly bool $public = false,
         public readonly ?string $permission = null,
+        public readonly ?string $validFromColumn = null,
+        public readonly ?string $validToColumn = null,
     ) {
     }
 

@@ -70,6 +70,8 @@ final class TopicModelBuilder
                 dateColumn: $topic->dateColumn,
                 public: $topic->public,
                 permission: $topic->permission,
+                validFromColumn: $topic->validFromColumn,
+                validToColumn: $topic->validToColumn,
             );
         }
 

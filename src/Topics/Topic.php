@@ -49,6 +49,16 @@ abstract class Topic
 
     public ?string $dateColumn = null;
 
+    /**
+     * For rows valid over a span (structure assignments with from_date /
+     * to_date): the report period keeps rows valid at any time in it,
+     * i.e. from <= period end and (to is empty or to >= period start).
+     * Used instead of $dateColumn when set.
+     */
+    public ?string $validFromColumn = null;
+
+    public ?string $validToColumn = null;
+
     /** Lookup data anyone building reports may read in full (specialities, products). */
     public bool $public = false;
 
