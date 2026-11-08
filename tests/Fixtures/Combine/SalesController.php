@@ -20,7 +20,7 @@ class SalesController
 
         $rows = $line === 'L1'
             ? [
-                ['id' => 1, 'employee' => 'Ali', 'product' => 'A', 'value' => '1000.25', 'achievement' => '70%'],
+                ['id' => 1, 'employee' => 'Ali', 'product' => 'A', 'value' => '1,000.25', 'achievement' => '70%'],
                 ['id' => 1, 'employee' => 'Ali', 'product' => 'B', 'value' => '500.25', 'achievement' => '80%'],
                 ['id' => 4, 'employee' => 'Sara', 'product' => 'A', 'value' => 300, 'achievement' => '30.5%'],
             ]

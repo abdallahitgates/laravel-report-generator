@@ -123,7 +123,8 @@ it('needs each report\'s own permission', function () use ($combined) {
 
 it('discovers the columns a report offers', function () {
     $fields = $this->actingAs($this->admin)->getJson('/api/report-generator/combine/reports/visit_statistics/fields?level=employee')->assertOk()->json('data');
-    expect(array_column($fields, 'type', 'key'))->toBe(['total_actual' => 'integer', 'avg_visits' => 'decimal']);
+    expect(array_column($fields, 'type', 'key'))->toBe(['emp_code' => 'string', 'total_actual' => 'integer', 'avg_visits' => 'decimal'])
+        ->and(array_column($fields, 'total', 'key'))->toBe(['emp_code' => null, 'total_actual' => 'sum', 'avg_visits' => null]);
 
     $sales = $this->actingAs($this->admin)->getJson('/api/report-generator/combine/reports/sales/fields?level=employee&lines[]=1')->assertOk()->json('data');
     expect(array_column($sales, 'type', 'key'))->toBe(['product' => 'string', 'value' => 'decimal', 'achievement' => 'percent']);

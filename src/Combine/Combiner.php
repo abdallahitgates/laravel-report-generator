@@ -356,10 +356,12 @@ final class Combiner
         foreach ($keys as $key => $values) {
             $filled = array_filter($values, fn ($v) => $v !== null && $v !== '');
             $type = match (true) {
+                // Codes, ids and phone numbers are labels even when they are digits.
+                (bool) preg_match('/(^|_)(code|id|phone|mobile|tel|ucode)$/i', (string) $key) => 'string',
                 $filled === [] => 'decimal',
-                array_filter($filled, fn ($v) => ! is_numeric($v) && ! (is_string($v) && preg_match('/^-?[\d.,]+\s*%$/', $v))) !== [] => 'string',
+                array_filter($filled, fn ($v) => ! self::numeric($v) && ! (is_string($v) && preg_match('/^-?[\d.,]+\s*%$/', $v))) !== [] => 'string',
                 array_filter($filled, fn ($v) => is_string($v) && str_ends_with(trim($v), '%')) !== [] => 'percent',
-                array_filter($filled, fn ($v) => ! preg_match('/^-?\d+$/', (string) $v)) === [] => 'integer',
+                array_filter($filled, fn ($v) => ! preg_match('/^-?[\d,]+$/', (string) $v)) === [] => 'integer',
                 default => 'decimal',
             };
             if (is_array(reset($filled)) || is_object(reset($filled))) {
@@ -396,7 +398,7 @@ final class Combiner
                 if ($m === null || $m['type'] === 'string') {
                     $byId[$id][$key] ??= $value;
                 } elseif (($m['total'] ?? null) === 'sum') {
-                    $byId[$id][$key] = (float) ($byId[$id][$key] ?? 0) + (is_numeric($value) ? (float) $value : 0);
+                    $byId[$id][$key] = (self::number($byId[$id][$key] ?? 0) ?? 0) + (self::number($value) ?? 0);
                 } else {
                     $byId[$id][$key] = null;
                 }
@@ -404,6 +406,21 @@ final class Combiner
         }
 
         return array_values($byId);
+    }
+
+    /** Numbers as reports print them: 1234, "1234.5", "1,234.50". */
+    private static function numeric(mixed $value): bool
+    {
+        return is_numeric($value) || (is_string($value) && preg_match('/^-?\d{1,3}(,\d{3})+(\.\d+)?$/', trim($value)));
+    }
+
+    private static function number(mixed $value): ?float
+    {
+        if (is_int($value) || is_float($value)) {
+            return (float) $value;
+        }
+
+        return self::numeric($value) ? (float) str_replace(',', '', trim((string) $value)) : null;
     }
 
     private function defaultTotal(string $key, string $type): ?string
@@ -448,13 +465,15 @@ final class Combiner
         if ($type === 'percent') {
             $number = (float) str_replace([',', '%', ' '], '', (string) $value);
 
-            return $number / 100;
+            return round($number / 100, 8);
         }
         if ($type === 'integer') {
-            return is_numeric($value) ? (int) $value : null;
+            $number = self::number($value);
+
+            return $number === null ? null : (int) round($number);
         }
         if ($type === 'decimal') {
-            return is_numeric($value) ? (float) $value : null;
+            return self::number($value);
         }
 
         return is_scalar($value) ? $value : json_encode($value, JSON_UNESCAPED_UNICODE);

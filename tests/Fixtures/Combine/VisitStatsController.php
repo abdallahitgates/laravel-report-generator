@@ -17,7 +17,7 @@ class VisitStatsController
 
         $rows = $visit['filter'] == 2
             ? [
-                ['id' => 1, 'line' => 'North', 'division' => 'Cairo', 'employee' => 'Ali', 'total_actual' => 12, 'avg_visits' => 4, 'color' => '#fff'],
+                ['id' => 1, 'line' => 'North', 'division' => 'Cairo', 'employee' => 'Ali', 'emp_code' => '0012', 'total_actual' => 12, 'avg_visits' => 4, 'color' => '#fff'],
                 ['id' => 2, 'line' => 'North', 'division' => 'Giza', 'employee' => 'Mona', 'total_actual' => 5, 'avg_visits' => 2.5, 'color' => '#000'],
                 ['id' => 3, 'line' => 'South', 'division' => 'Aswan', 'employee' => 'Omar', 'total_actual' => '7', 'avg_visits' => 3.5, 'color' => '#111'],
             ]
