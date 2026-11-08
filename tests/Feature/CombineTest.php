@@ -62,7 +62,9 @@ it('puts columns of several reports side by side per employee', function () use 
     $result = app(QueryEngine::class)->rows($combined, [], $this->admin, 0, 50);
 
     expect(array_column($result['rows'], 'employee'))->toBe(['Ali', 'Omar', 'Mona', 'Sara'])
-        ->and($result['rows'][0])->toBe(['employee' => 'Ali', 'visits' => 12, 'per_day' => 4.0, 'sales' => 1500.5, 'achievement' => 0.75, 'sales_per_visit' => 125.04])
+        // Ali is listed once per product in the sales report: amounts add up, rates cannot.
+        ->and($result['rows'][0])->toBe(['employee' => 'Ali', 'visits' => 12, 'per_day' => 4.0, 'sales' => 1500.5, 'achievement' => null, 'sales_per_visit' => 125.04])
+        ->and($result['rows'][3]['achievement'])->toBe(0.305)
         // Omar has no sales value of note, Sara no visits: rows stay, values are empty.
         ->and($result['rows'][1]['sales_per_visit'])->toEqual(0)
         ->and($result['rows'][3]['visits'])->toBeNull()
@@ -124,7 +126,7 @@ it('discovers the columns a report offers', function () {
     expect(array_column($fields, 'type', 'key'))->toBe(['total_actual' => 'integer', 'avg_visits' => 'decimal']);
 
     $sales = $this->actingAs($this->admin)->getJson('/api/report-generator/combine/reports/sales/fields?level=employee&lines[]=1')->assertOk()->json('data');
-    expect(array_column($sales, 'type', 'key'))->toBe(['value' => 'decimal', 'achievement' => 'percent']);
+    expect(array_column($sales, 'type', 'key'))->toBe(['product' => 'string', 'value' => 'decimal', 'achievement' => 'percent']);
 });
 
 it('saves, publishes the usual way, runs and exports a combined report', function () use ($combined) {

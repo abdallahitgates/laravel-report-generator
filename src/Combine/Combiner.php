@@ -149,7 +149,7 @@ final class Combiner
             $rows = $this->rowsOf($report, $run);
             $meta = $this->describe($report->fields(), array_slice($rows, 0, 200), $report);
             $columnsMeta[$key] = array_column($meta, null, 'key');
-            foreach ($rows as $row) {
+            foreach ($this->collapse($rows, $columnsMeta[$key]) as $row) {
                 $id = (string) $row['id'];
                 $byId[$id] ??= ['__id' => $row['id']];
                 foreach (array_keys(self::BASE) as $base) {
@@ -369,6 +369,41 @@ final class Combiner
         }
 
         return $out;
+    }
+
+    /**
+     * One row per id: reports that list an employee several times (once per
+     * product) are added up. Amounts are summed, rates and averages cannot
+     * be and are left empty (a formula can recompute them), text keeps the
+     * first value.
+     *
+     * @param  array<string, array>  $meta  by key
+     * @return list<array<string, mixed>>
+     */
+    private function collapse(array $rows, array $meta): array
+    {
+        $byId = [];
+        $repeated = [];
+        foreach ($rows as $row) {
+            $id = (string) $row['id'];
+            if (! isset($byId[$id])) {
+                $byId[$id] = $row;
+                continue;
+            }
+            $repeated[$id] = true;
+            foreach ($row as $key => $value) {
+                $m = $meta[$key] ?? null;
+                if ($m === null || $m['type'] === 'string') {
+                    $byId[$id][$key] ??= $value;
+                } elseif (($m['total'] ?? null) === 'sum') {
+                    $byId[$id][$key] = (float) ($byId[$id][$key] ?? 0) + (is_numeric($value) ? (float) $value : 0);
+                } else {
+                    $byId[$id][$key] = null;
+                }
+            }
+        }
+
+        return array_values($byId);
     }
 
     private function defaultTotal(string $key, string $type): ?string

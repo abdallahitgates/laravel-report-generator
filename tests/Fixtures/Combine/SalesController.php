@@ -19,7 +19,11 @@ class SalesController
         }
 
         $rows = $line === 'L1'
-            ? [['id' => 1, 'employee' => 'Ali', 'value' => '1500.50', 'achievement' => '75%'], ['id' => 4, 'employee' => 'Sara', 'value' => 300, 'achievement' => '30.5%']]
+            ? [
+                ['id' => 1, 'employee' => 'Ali', 'product' => 'A', 'value' => '1000.25', 'achievement' => '70%'],
+                ['id' => 1, 'employee' => 'Ali', 'product' => 'B', 'value' => '500.25', 'achievement' => '80%'],
+                ['id' => 4, 'employee' => 'Sara', 'product' => 'A', 'value' => 300, 'achievement' => '30.5%'],
+            ]
             : [['id' => 3, 'employee' => 'Omar', 'value' => 0, 'achievement' => '0%']];
 
         return ['data' => $rows];
