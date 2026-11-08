@@ -9,8 +9,9 @@ use Illuminate\Support\Str;
 
 /**
  * A first dashboard for a report, from its columns: a KPI per main number,
- * a line chart over its time column, a bar chart of the top items of its
- * first other column, a pie of the second, and the report's top rows.
+ * a line chart over its time column (one number: one axis), a bar chart of
+ * the top items of its first other column, the share of the second (a 100%
+ * bar, not a pie), and the report's top rows.
  * People then adjust it in the editor.
  */
 final class DashboardGenerator
@@ -49,14 +50,15 @@ final class DashboardGenerator
         }
 
         $main = array_map(fn ($c) => $c['alias'], array_slice($numbers, 0, 2));
-        if ($main !== [] && $time !== []) {
-            $add(['type' => 'line', 'title' => $this->title($numbers, $main, $time[0]), 'category' => $time[0]['alias'], 'values' => $main, 'top' => 120, 'size' => 'full']);
+        // One number per line chart: two numbers of different scales never share an axis.
+        foreach (array_slice($main, 0, $time !== [] ? 2 : 0) as $i => $alias) {
+            $add(['type' => 'line', 'title' => $this->title($numbers, [$alias], $time[0]), 'category' => $time[0]['alias'], 'values' => [$alias], 'top' => 120, 'size' => count($main) > 1 ? 'md' : 'full']);
         }
         if ($main !== [] && isset($other[0])) {
             $add(['type' => 'bar', 'title' => 'Top '.Str::plural(Str::lower($other[0]['label'])).' by '.Str::lower($numbers[0]['label']), 'category' => $other[0]['alias'], 'values' => [$main[0]], 'top' => 10, 'size' => isset($other[1]) ? 'md' : 'full']);
         }
         if ($main !== [] && isset($other[1])) {
-            $add(['type' => 'pie', 'title' => $numbers[0]['label'].' by '.Str::lower($other[1]['label']), 'category' => $other[1]['alias'], 'values' => [$main[0]], 'top' => 8, 'size' => 'md']);
+            $add(['type' => 'share', 'title' => 'Share of '.Str::lower($numbers[0]['label']).' by '.Str::lower($other[1]['label']), 'category' => $other[1]['alias'], 'values' => [$main[0]], 'top' => 6, 'size' => 'md']);
         }
         $add(['type' => 'table', 'title' => $report->name, 'top' => 10, 'size' => 'full']);
 

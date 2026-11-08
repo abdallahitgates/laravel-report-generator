@@ -158,7 +158,8 @@ Widgets over saved reports, with shared report filters (period, lines, ...):
 | Widget | Data |
 |---|---|
 | `kpi` | totals of some of the report's numbers (averages included: one aggregate query) |
-| `bar`, `pie` | the top `top` items of one of the report's columns by its first number |
+| `bar` | the top `top` items of one of the report's columns by its first number |
+| `share` | how a total splits across one of the report's columns (a 100% bar; up to `top` parts) |
 | `line` | numbers over one of the report's columns (a month, a day), in order |
 | `table` | the report's first `top` rows, optionally some columns only |
 

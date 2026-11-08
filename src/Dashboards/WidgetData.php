@@ -14,7 +14,7 @@ use Illuminate\Contracts\Auth\Authenticatable;
  * always with the viewer's own access:
  *
  * - kpi:   totals of some of the report's numbers (one aggregate query);
- * - bar / line / pie: the report's numbers per one of its columns,
+ * - bar / line / share: the report's numbers per one of its columns,
  *          re-aggregated by the database (combined reports: in memory from
  *          the cached result);
  * - table: the report's first rows, as it sorts them.
@@ -24,7 +24,7 @@ use Illuminate\Contracts\Auth\Authenticatable;
  */
 final class WidgetData
 {
-    public const TYPES = ['kpi', 'bar', 'line', 'pie', 'table'];
+    public const TYPES = ['kpi', 'bar', 'line', 'share', 'table'];
 
     private const TIME_GRAINS = ['day', 'week', 'month', 'quarter', 'year', 'hour'];
 
@@ -40,7 +40,7 @@ final class WidgetData
     {
         $type = $widget['type'] ?? null;
         if (! in_array($type, self::TYPES, true)) {
-            throw new QueryException('INVALID_WIDGET', 'A widget is a kpi, bar, line, pie or table.', 'type');
+            throw new QueryException('INVALID_WIDGET', 'A widget is a kpi, bar, line, share or table.', 'type');
         }
 
         $definition = ViewerChoices::apply($report->definition, $choices);

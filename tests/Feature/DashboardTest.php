@@ -43,10 +43,11 @@ it('proposes a dashboard from a report', function () {
     $layout = $this->actingAs($this->owner)->postJson('/api/report-generator/dashboards-generate', ['report' => $this->report['uuid']])->assertOk()->json('data');
 
     expect($layout['name'])->toBe('Visits per rep dashboard')
-        ->and(array_column($layout['widgets'], 'type'))->toBe(['kpi', 'kpi', 'kpi', 'kpi', 'line', 'bar', 'pie', 'table'])
-        ->and($layout['widgets'][4])->toMatchArray(['category' => 'month', 'values' => ['visits', 'amount']])
-        ->and($layout['widgets'][5])->toMatchArray(['category' => 'rep', 'values' => ['visits'], 'top' => 10])
-        ->and($layout['widgets'][6]['category'])->toBe('speciality');
+        ->and(array_column($layout['widgets'], 'type'))->toBe(['kpi', 'kpi', 'kpi', 'kpi', 'line', 'line', 'bar', 'share', 'table'])
+        ->and($layout['widgets'][4])->toMatchArray(['category' => 'month', 'values' => ['visits']])
+        ->and($layout['widgets'][5])->toMatchArray(['category' => 'month', 'values' => ['amount']])
+        ->and($layout['widgets'][6])->toMatchArray(['category' => 'rep', 'values' => ['visits'], 'top' => 10])
+        ->and($layout['widgets'][7])->toMatchArray(['category' => 'speciality', 'top' => 6]);
 });
 
 it('totals numbers for KPI widgets, averages included', function () {
@@ -85,7 +86,7 @@ it('saves dashboards for their owner and opens them for viewers', function () {
     $layout = $this->actingAs($this->owner)->postJson('/api/report-generator/dashboards-generate', ['report' => $this->report['uuid']])->json('data');
     $saved = $this->actingAs($this->owner)->postJson('/api/report-generator/dashboards', ['name' => 'Visits', 'layout' => $layout])->assertCreated()->json('data');
 
-    expect($saved['widgets_count'])->toBe(8)->and($saved['layout']['widgets'][0]['report_name'])->toBe('Visits per rep');
+    expect($saved['widgets_count'])->toBe(9)->and($saved['layout']['widgets'][0]['report_name'])->toBe('Visits per rep');
 
     $uuid = $saved['uuid'];
     $this->actingAs($this->other)->getJson("/api/report-generator/dashboards/{$uuid}")->assertForbidden();
