@@ -151,6 +151,25 @@ any report. Empty `lines` means the viewer's own lines (from the lines
 picker topic). The merged table is cached (`cache.ttl`), so paging, sorting
 and totals do not run the reports again.
 
+## Dashboards
+
+Widgets over saved reports, with shared report filters (period, lines, ...):
+
+| Widget | Data |
+|---|---|
+| `kpi` | totals of some of the report's numbers (averages included: one aggregate query) |
+| `bar`, `pie` | the top `top` items of one of the report's columns by its first number |
+| `line` | numbers over one of the report's columns (a month, a day), in order |
+| `table` | the report's first `top` rows, optionally some columns only |
+
+Charts re-aggregate the report by the chosen column in the database (combined
+reports: in memory from the cached result, averages averaged rather than
+added up). `POST /dashboards-generate {report}` proposes a first layout
+from a report's columns. Dashboards publish like reports (a permission and
+roles, a menu entry; `/menu` lists both with a `type`). Whoever may open a
+dashboard sees its widgets with their own data access, even without access
+to the reports behind them.
+
 ## Report filters
 
 Every report can be limited by period, lines, divisions and employees on
@@ -426,6 +445,13 @@ All paths are under the configured prefix (default `api/report-generator`).
 | POST | `/query/rows` | create reports | One page of results (`definition`, `parameters`, `page`, `groups`, `query_id`) |
 | POST | `/query/summary` | create reports | Row count and grand totals of a definition |
 | GET | `/combine/reports` | create reports | Existing reports the user may combine |
+| GET | `/dashboards` | any user | Dashboards the user may open |
+| GET | `/dashboards/{uuid}` | may open it | Layout and default filters |
+| POST | `/dashboards/{uuid}/widgets/{id}` | may open it | One widget's data (`context` for the filters) |
+| POST / PATCH / DELETE | `/dashboards`, `/dashboards/{uuid}` | create reports (owner) | Save / change / delete (`name`, `visibility`, `layout`) |
+| POST | `/dashboards-generate` | create reports | A first layout for a report |
+| POST | `/dashboards-preview` | create reports | A widget's data while editing |
+| GET / PUT / DELETE | `/dashboards/{uuid}/publish` | publish | Like reports |
 | GET | `/combine/reports/{key}/fields` | create reports | Columns a report offers (`level`, `period`, `lines[]`) |
 | POST | `/query/export` | create + export | A definition as `csv` or `xlsx`, streamed |
 | POST | `/query/values` | create reports | Distinct values of a field for filter pickers (`field`, `search`) |

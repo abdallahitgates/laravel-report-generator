@@ -56,6 +56,23 @@ final class ReportAccess
         return $permissions->filter(fn (string $p) => $this->generator->allows($user, $p))->values()->all();
     }
 
+    /**
+     * Dashboards: the owner, everyone when public, holders of its permission,
+     * and view-all users. Each widget still needs access to its report.
+     */
+    public function canViewDashboard(\Abdalla\ReportGenerator\Models\Dashboard $dashboard, ?Authenticatable $user): bool
+    {
+        return ($user !== null && (string) $dashboard->owner_id === (string) $user->getAuthIdentifier())
+            || $dashboard->visibility === Report::PUBLIC
+            || ($dashboard->permission !== null && $user !== null && $this->generator->allows($user, $dashboard->permission))
+            || $this->generator->allows($user, Ability::ViewAllReports);
+    }
+
+    public function canEditDashboard(\Abdalla\ReportGenerator\Models\Dashboard $dashboard, ?Authenticatable $user): bool
+    {
+        return $user !== null && (string) $dashboard->owner_id === (string) $user->getAuthIdentifier();
+    }
+
     public function canEdit(Report $report, ?Authenticatable $user): bool
     {
         return $this->isOwner($report, $user) || $this->share($report, $user) === 'edit';

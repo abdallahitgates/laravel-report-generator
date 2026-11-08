@@ -3,6 +3,7 @@
 namespace Abdalla\ReportGenerator\Http\Controllers\Reports;
 
 use Abdalla\ReportGenerator\Contracts\PermissionStore;
+use Abdalla\ReportGenerator\Models\Dashboard;
 use Abdalla\ReportGenerator\Models\Report;
 use Abdalla\ReportGenerator\Security\ReportAccess;
 use Illuminate\Http\JsonResponse;
@@ -36,16 +37,46 @@ class PublishController extends Controller
 
     public function update(Request $request, Report $report): JsonResponse
     {
+        return $this->publish($request, $report);
+    }
+
+    public function destroy(Report $report): JsonResponse
+    {
+        return $this->unpublish($report);
+    }
+
+    // Dashboards publish the same way.
+
+    public function showDashboard(Dashboard $dashboard): JsonResponse
+    {
+        return new JsonResponse(['data' => $this->settings($dashboard)]);
+    }
+
+    public function updateDashboard(Request $request, Dashboard $dashboard): JsonResponse
+    {
+        return $this->publish($request, $dashboard);
+    }
+
+    public function destroyDashboard(Dashboard $dashboard): JsonResponse
+    {
+        return $this->unpublish($dashboard);
+    }
+
+    private function publish(Request $request, Report|Dashboard $report): JsonResponse
+    {
+        // One permission opens one report or dashboard.
+        $other = $report instanceof Report ? new Dashboard() : new Report();
         $data = $request->validate([
             'permission' => ['required', 'string', 'max:191', 'regex:/^[a-z0-9][a-z0-9_.\-]*$/',
-                Rule::unique($report->getConnectionName().'.'.$report->getTable(), 'permission')->ignore($report->getKey())],
+                Rule::unique($report->getConnectionName().'.'.$report->getTable(), 'permission')->ignore($report->getKey()),
+                Rule::unique($other->getConnectionName().'.'.$other->getTable(), 'permission')],
             'roles' => ['present', 'array', 'max:200'],
             'roles.*' => ['string', 'max:191', Rule::in(array_column($this->permissions->roles(), 'name'))],
             'in_menu' => ['sometimes', 'boolean'],
             'menu_group' => ['sometimes', 'nullable', 'string', 'max:120'],
         ], [
             'permission.regex' => 'Use lowercase letters, digits, dots, dashes and underscores for the permission name.',
-            'permission.unique' => 'Another report already uses this permission.',
+            'permission.unique' => 'Another report or dashboard already uses this permission.',
         ]);
 
         $report->getConnection()->transaction(function () use ($report, $data) {
@@ -67,14 +98,14 @@ class PublishController extends Controller
      * Stops publishing: the report leaves the menu and the permission no
      * longer opens it. The permission itself stays in the host's system.
      */
-    public function destroy(Report $report): JsonResponse
+    private function unpublish(Report|Dashboard $report): JsonResponse
     {
         $report->forceFill(['permission' => null, 'in_menu' => false, 'published_at' => null])->save();
 
         return new JsonResponse(['data' => $this->settings($report)]);
     }
 
-    private function settings(Report $report): array
+    private function settings(Report|Dashboard $report): array
     {
         return [
             'published' => $report->permission !== null,
@@ -87,9 +118,9 @@ class PublishController extends Controller
         ];
     }
 
-    private function suggest(Report $report): string
+    private function suggest(Report|Dashboard $report): string
     {
-        $prefix = (string) config('report-generator.permissions.prefix', 'show_reports_');
+        $prefix = (string) config('report-generator.permissions.prefix', 'show_reports_').($report instanceof Dashboard ? 'dashboard_' : '');
 
         return mb_substr($prefix.(Str::slug($report->name, '_') ?: $report->uuid), 0, 191);
     }

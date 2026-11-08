@@ -17,6 +17,7 @@ final class Tables
     public const REPORT_SHARES = 'report_shares';
     public const RUNS = 'runs';
     public const QUERY_LOG = 'query_log';
+    public const DASHBOARDS = 'dashboards';
 
     /** Tables in use. The scanned-model tables above were dropped in v0.2. */
     public const ALL = [
@@ -24,6 +25,7 @@ final class Tables
         self::REPORT_SHARES,
         self::RUNS,
         self::QUERY_LOG,
+        self::DASHBOARDS,
     ];
 
     public static function name(string $table): string

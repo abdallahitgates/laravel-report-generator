@@ -156,3 +156,20 @@ it('reports which report failed', function () use ($combined) {
     $this->actingAs($this->admin)->postJson('/api/report-generator/query/rows', ['definition' => $combined])
         ->assertStatus(422)->assertJsonPath('code', 'REPORT_FAILED')->assertJsonPath('details.report', 'sales');
 });
+
+it('feeds dashboard widgets, aggregated in memory', function () use ($combined) {
+    $combined['fields'][] = ['base' => 'line', 'as' => 'line'];
+    $uuid = $this->actingAs($this->admin)->postJson('/api/report-generator/reports', ['name' => 'Visits and sales', 'definition' => $combined])->json('data.uuid');
+    $preview = fn (array $widget) => $this->actingAs($this->admin)->postJson('/api/report-generator/dashboards-preview', ['widget' => $widget + ['report' => $uuid]])->assertOk()->json();
+
+    $bar = $preview(['type' => 'bar', 'category' => 'line', 'values' => ['visits', 'sales', 'per_day']]);
+    // per_day is an average: averaged across the line's employees, not added up.
+    expect($bar['rows'])->toEqual([
+        ['line' => 'North', 'visits' => 17, 'sales' => 1500.5, 'per_day' => 3.25],
+        ['line' => 'South', 'visits' => 7, 'sales' => 0, 'per_day' => 3.5],
+        ['line' => null, 'visits' => null, 'sales' => 300, 'per_day' => null],
+    ]);
+
+    $kpi = $preview(['type' => 'kpi', 'values' => ['visits', 'sales']]);
+    expect($kpi['rows'])->toEqual([['visits' => 24, 'sales' => 1800.5]]);
+});

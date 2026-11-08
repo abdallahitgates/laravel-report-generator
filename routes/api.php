@@ -1,6 +1,7 @@
 <?php
 
 use Abdalla\ReportGenerator\Http\Controllers\CombineController;
+use Abdalla\ReportGenerator\Http\Controllers\Dashboards\DashboardController;
 use Abdalla\ReportGenerator\Http\Controllers\ExportController;
 use Abdalla\ReportGenerator\Http\Controllers\MetaController;
 use Abdalla\ReportGenerator\Http\Controllers\Query\QueryController;
@@ -30,12 +31,20 @@ Route::post('reports/{report}/export', [ExportController::class, 'report'])->nam
 // Choices for the report filters (lines, divisions, employees), limited to what the user may see.
 Route::get('context/{kind}', [RunController::class, 'contextOptions'])->name('context.options');
 
+// Dashboards: opening and their widgets' data (anyone who may open them).
+Route::get('dashboards', [DashboardController::class, 'index'])->name('dashboards.index');
+Route::get('dashboards/{dashboard}', [DashboardController::class, 'show'])->name('dashboards.show');
+Route::post('dashboards/{dashboard}/widgets/{widget}', [DashboardController::class, 'widget'])->name('dashboards.widget');
+
 // Publishing: a permission per report, given to roles, and a menu entry.
 Route::middleware('report-generator.can:publishReports')->group(function () {
     Route::get('permissions/roles', [PublishController::class, 'roles'])->name('permissions.roles');
     Route::get('reports/{report}/publish', [PublishController::class, 'show'])->name('reports.publish.show');
     Route::put('reports/{report}/publish', [PublishController::class, 'update'])->name('reports.publish');
     Route::delete('reports/{report}/publish', [PublishController::class, 'destroy'])->name('reports.unpublish');
+    Route::get('dashboards/{dashboard}/publish', [PublishController::class, 'showDashboard'])->name('dashboards.publish.show');
+    Route::put('dashboards/{dashboard}/publish', [PublishController::class, 'updateDashboard'])->name('dashboards.publish');
+    Route::delete('dashboards/{dashboard}/publish', [PublishController::class, 'destroyDashboard'])->name('dashboards.unpublish');
 });
 
 // Building and running reports.
@@ -45,6 +54,13 @@ Route::middleware('report-generator.can:createReports')->group(function () {
     Route::post('query/rows', [QueryController::class, 'rows'])->name('query.rows');
     Route::post('query/values', [QueryController::class, 'values'])->name('query.values');
     Route::post('query/summary', [QueryController::class, 'summary'])->name('query.summary');
+
+    // Building dashboards.
+    Route::post('dashboards', [DashboardController::class, 'store'])->name('dashboards.store');
+    Route::patch('dashboards/{dashboard}', [DashboardController::class, 'update'])->name('dashboards.update');
+    Route::delete('dashboards/{dashboard}', [DashboardController::class, 'destroy'])->name('dashboards.destroy');
+    Route::post('dashboards-generate', [DashboardController::class, 'generate'])->name('dashboards.generate');
+    Route::post('dashboards-preview', [DashboardController::class, 'preview'])->name('dashboards.preview');
 
     // Combined reports: existing reports side by side per employee or division.
     Route::get('combine/reports', [CombineController::class, 'reports'])->name('combine.reports');

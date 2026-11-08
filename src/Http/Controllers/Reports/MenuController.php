@@ -26,11 +26,24 @@ class MenuController extends Controller
 
         $reports = $query->orderBy('menu_group')->orderBy('name')->get(['uuid', 'name', 'description', 'menu_group']);
 
-        return new JsonResponse(['data' => $reports->map(fn (Report $r) => [
+        $dashboards = \Abdalla\ReportGenerator\Models\Dashboard::query()->whereNotNull('permission')->where('in_menu', true);
+        if (! $generator->allows($user, Ability::ViewAllReports)) {
+            $held = \Abdalla\ReportGenerator\Models\Dashboard::query()->whereNotNull('permission')->distinct()->pluck('permission')
+                ->filter(fn (string $p) => $user !== null && $generator->allows($user, $p))->values()->all();
+            $dashboards->whereIn('permission', $held ?: ['__none__']);
+        }
+
+        $item = fn (string $type) => fn ($r) => [
+            'type' => $type,
             'uuid' => $r->uuid,
             'name' => $r->name,
             'description' => $r->description,
             'group' => $r->menu_group,
-        ])->values()]);
+        ];
+
+        return new JsonResponse(['data' => [
+            ...$dashboards->orderBy('menu_group')->orderBy('name')->get(['uuid', 'name', 'description', 'menu_group'])->map($item('dashboard')),
+            ...$reports->map($item('report')),
+        ]]);
     }
 }

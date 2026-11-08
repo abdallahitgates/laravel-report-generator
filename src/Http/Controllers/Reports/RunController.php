@@ -111,14 +111,7 @@ class RunController extends Controller
             'sort.*.dir' => ['required', 'in:asc,desc'],
         ]);
 
-        if (isset($data['sort'])) {
-            $aliases = array_column($definition['fields'] ?? [], 'as');
-            $definition['sort'] = array_values(array_filter($data['sort'], fn ($s) => in_array($s['field'], $aliases, true)));
-        }
-        $context = array_merge($definition['context'] ?? [], Arr::only($data['context'] ?? [], ['period', 'lines', 'divisions', 'employees']));
-        $definition['context'] = array_filter($context, fn ($v) => $v !== null && $v !== []);
-
-        return $definition;
+        return \Abdalla\ReportGenerator\Dashboards\ViewerChoices::apply($definition, $data);
     }
 
     /** Count and grand totals of the whole report, with the viewer's choices. */
