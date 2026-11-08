@@ -102,6 +102,14 @@ it('lets holders open and run the report without being able to build reports', f
     $rows = $this->actingAs($rep)->postJson("/api/report-generator/reports/{$uuid}/rows")->assertOk()->json('rows');
     expect(array_column($rows, 'rep'))->toBe([null, 'Ali', 'Mona', 'Omar']);
 
+    $view = $this->actingAs($rep)->getJson("/api/report-generator/reports/{$uuid}/view")->json('data');
+    expect(array_column($view['fields'], 'kind', 'as'))->toBe(['rep' => 'dimension', 'visits' => 'value'])
+        ->and($view['sort'])->toBe([['field' => 'rep', 'dir' => 'asc']]);
+
+    $sorted = $this->actingAs($rep)->postJson("/api/report-generator/reports/{$uuid}/rows", ['sort' => [['field' => 'visits', 'dir' => 'desc'], ['field' => 'nope', 'dir' => 'asc']]])
+        ->assertOk()->json('rows');
+    expect((int) $sorted[0]['visits'])->toBe(3);
+
     // The viewer picks the period.
     $january = $this->actingAs($rep)->postJson("/api/report-generator/reports/{$uuid}/rows", ['context' => ['period' => ['2026-01-01', '2026-01-31']]])
         ->assertOk()->json('rows');

@@ -36,6 +36,17 @@ class RunController extends Controller
             'root' => $definition['root'] ?? null,
             'context' => $definition['context'] ?? (object) [],
             'parameters' => $definition['parameters'] ?? [],
+            // Columns (no refs or filters: viewers need names, kinds and grouping only).
+            'fields' => array_map(fn (array $f) => array_filter([
+                'as' => $f['as'] ?? null,
+                'label' => $f['label'] ?? null,
+                'kind' => isset($f['agg']) || isset($f['formula']) ? 'value' : 'dimension',
+                'grain' => $f['grain'] ?? null,
+            ], fn ($v) => $v !== null), $definition['fields'] ?? []),
+            'sort' => $definition['sort'] ?? [],
+            'grouped' => (bool) ($definition['ui']['grouped'] ?? false),
+            'rows' => $definition['ui']['rows'] ?? [],
+            'subtotals' => (bool) ($definition['subtotals'] ?? false),
             'can_edit' => $this->access->canEdit($report, $request->user()),
             'updated_at' => $report->updated_at?->toIso8601String(),
         ]]);
@@ -57,9 +68,17 @@ class RunController extends Controller
             'groups.columns.*' => ['string'],
             'groups.keys' => ['sometimes', 'array', 'max:10'],
             'query_id' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'sort' => ['sometimes', 'array', 'max:5'],
+            'sort.*.field' => ['required', 'string', 'max:64'],
+            'sort.*.dir' => ['required', 'in:asc,desc'],
         ]);
 
         $definition = $report->definition;
+        if (isset($data['sort'])) {
+            // Sorting by the report's own columns only.
+            $aliases = array_column($definition['fields'] ?? [], 'as');
+            $definition['sort'] = array_values(array_filter($data['sort'], fn ($s) => in_array($s['field'], $aliases, true)));
+        }
         // The viewer's report filters replace the saved ones; others stay.
         $context = array_merge($definition['context'] ?? [], Arr::only($data['context'] ?? [], ['period', 'lines', 'divisions', 'employees']));
         $definition['context'] = array_filter($context, fn ($v) => $v !== null && $v !== []);
