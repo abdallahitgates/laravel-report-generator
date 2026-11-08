@@ -20,7 +20,7 @@ use Abdalla\ReportGenerator\Sources\SourceRegistry;
  */
 class ReportGenerator
 {
-    public const VERSION = '0.2.0';
+    public const VERSION = '0.3.0';
 
     /** @var (Closure(?Authenticatable, string, array): bool)|null */
     private ?Closure $authorizer = null;
