@@ -707,6 +707,7 @@ final class QueryCompiler
                 'kind' => $field->isTotal() ? 'measure' : 'dimension',
                 'format' => $field->spec->format ?? ($field->kind === PlannedField::MEASURE && $field->spec->aggregation !== Aggregation::Count && ! $field->isRowCount() ? $field->field?->format : null),
                 'dataset' => $field->node?->dataset->key,
+                'total' => $this->grandTotal($field),
             ];
         }
         if ($this->plan->definition->subtotals) {
@@ -714,6 +715,30 @@ final class QueryCompiler
         }
 
         return $columns;
+    }
+
+    /**
+     * How a column's grand total is worked out from its values: sums and
+     * counts add up, min / max of min / max; averages, distinct counts and
+     * formulas have no meaningful total.
+     */
+    private function grandTotal(PlannedField $field): ?string
+    {
+        if ($field->kind === PlannedField::FORMULA || $field->formula !== null) {
+            return null;
+        }
+        if ($field->kind === PlannedField::MEASURE) {
+            return match ($field->spec->aggregation) {
+                Aggregation::Sum, Aggregation::Count => 'sum',
+                Aggregation::Min => 'min',
+                Aggregation::Max => 'max',
+                default => null,
+            };
+        }
+
+        // Detail rows: amounts add up, codes and ids do not.
+        return $field->field?->role === \Abdalla\ReportGenerator\Enums\FieldRole::Measure
+            && in_array($field->type, [DataType::Integer, DataType::Decimal], true) ? 'sum' : null;
     }
 
     private function filteredFields(): array

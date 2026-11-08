@@ -63,6 +63,14 @@ class QueryController extends Controller
         ));
     }
 
+    /** Count and grand totals of the whole report. */
+    public function summary(Request $request): JsonResponse
+    {
+        $data = $this->definitionInput($request);
+
+        return new JsonResponse($this->engine->summary($data['definition'], $data['parameters'] ?? [], $request->user()));
+    }
+
     public function values(Request $request): JsonResponse
     {
         $data = $request->validate([

@@ -1,5 +1,6 @@
 <?php
 
+use Abdalla\ReportGenerator\Http\Controllers\ExportController;
 use Abdalla\ReportGenerator\Http\Controllers\MetaController;
 use Abdalla\ReportGenerator\Http\Controllers\Query\QueryController;
 use Abdalla\ReportGenerator\Http\Controllers\Reports\MenuController;
@@ -23,6 +24,10 @@ Route::get('menu', MenuController::class)->name('menu');
 Route::get('reports/{report}/view', [RunController::class, 'show'])->name('reports.view');
 Route::post('reports/{report}/rows', [RunController::class, 'rows'])->name('reports.rows');
 Route::post('reports/{report}/values', [RunController::class, 'values'])->name('reports.values');
+Route::post('reports/{report}/summary', [RunController::class, 'summary'])->name('reports.summary');
+Route::post('reports/{report}/export', [ExportController::class, 'report'])->name('reports.export');
+// Choices for the report filters (lines, divisions, employees), limited to what the user may see.
+Route::get('context/{kind}', [RunController::class, 'contextOptions'])->name('context.options');
 
 // Publishing: a permission per report, given to roles, and a menu entry.
 Route::middleware('report-generator.can:publishReports')->group(function () {
@@ -38,6 +43,8 @@ Route::middleware('report-generator.can:createReports')->group(function () {
     Route::post('query/validate', [QueryController::class, 'validateDefinition'])->name('query.validate');
     Route::post('query/rows', [QueryController::class, 'rows'])->name('query.rows');
     Route::post('query/values', [QueryController::class, 'values'])->name('query.values');
+    Route::post('query/summary', [QueryController::class, 'summary'])->name('query.summary');
+    Route::post('query/export', [ExportController::class, 'definition'])->middleware('report-generator.can:exportReports')->name('query.export');
     Route::post('query/{queryId}/cancel', [QueryController::class, 'cancel'])->name('query.cancel');
 
     Route::get('reports', [ReportController::class, 'index'])->name('reports.index');

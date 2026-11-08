@@ -73,15 +73,7 @@ class RunController extends Controller
             'sort.*.dir' => ['required', 'in:asc,desc'],
         ]);
 
-        $definition = $report->definition;
-        if (isset($data['sort'])) {
-            // Sorting by the report's own columns only.
-            $aliases = array_column($definition['fields'] ?? [], 'as');
-            $definition['sort'] = array_values(array_filter($data['sort'], fn ($s) => in_array($s['field'], $aliases, true)));
-        }
-        // The viewer's report filters replace the saved ones; others stay.
-        $context = array_merge($definition['context'] ?? [], Arr::only($data['context'] ?? [], ['period', 'lines', 'divisions', 'employees']));
-        $definition['context'] = array_filter($context, fn ($v) => $v !== null && $v !== []);
+        $definition = self::applyViewerChoices($report->definition, $request);
 
         $groups = isset($data['groups']) ? [
             'columns' => array_values($data['groups']['columns'] ?? []),
@@ -97,6 +89,59 @@ class RunController extends Controller
             $groups,
             $data['query_id'] ?? null,
         ));
+    }
+
+    /**
+     * The saved definition with what the viewer picked: report filters
+     * (period, lines, divisions, employees) replace the saved ones, and the
+     * sort, on the report's own columns only.
+     */
+    public static function applyViewerChoices(array $definition, Request $request): array
+    {
+        $data = $request->validate([
+            'context' => ['sometimes', 'array'],
+            'context.period' => ['sometimes', 'nullable'],
+            'context.lines' => ['sometimes', 'array', 'max:1000'],
+            'context.divisions' => ['sometimes', 'array', 'max:1000'],
+            'context.employees' => ['sometimes', 'array', 'max:1000'],
+            'sort' => ['sometimes', 'array', 'max:5'],
+            'sort.*.field' => ['required', 'string', 'max:64'],
+            'sort.*.dir' => ['required', 'in:asc,desc'],
+        ]);
+
+        if (isset($data['sort'])) {
+            $aliases = array_column($definition['fields'] ?? [], 'as');
+            $definition['sort'] = array_values(array_filter($data['sort'], fn ($s) => in_array($s['field'], $aliases, true)));
+        }
+        $context = array_merge($definition['context'] ?? [], Arr::only($data['context'] ?? [], ['period', 'lines', 'divisions', 'employees']));
+        $definition['context'] = array_filter($context, fn ($v) => $v !== null && $v !== []);
+
+        return $definition;
+    }
+
+    /** Count and grand totals of the whole report, with the viewer's choices. */
+    public function summary(Request $request, Report $report): JsonResponse
+    {
+        $this->authorizeView($report, $request);
+        $definition = self::applyViewerChoices($report->definition, $request);
+
+        return new JsonResponse($this->engine->summary($definition, (array) $request->input('parameters', []), $request->user()));
+    }
+
+    /** Choices for a report filter: lines, divisions or employees the viewer may pick. */
+    public function contextOptions(Request $request, string $kind): JsonResponse
+    {
+        abort_unless(in_array($kind, ['lines', 'divisions', 'employees'], true), 404);
+        $data = $request->validate([
+            'search' => ['nullable', 'string', 'max:100'],
+            'lines' => ['sometimes', 'array', 'max:200'],
+            'period' => ['sometimes', 'nullable'],
+            'limit' => ['sometimes', 'integer', 'min:1', 'max:500'],
+        ]);
+
+        return new JsonResponse(['data' => $this->engine->contextOptions(
+            $kind, $data['search'] ?? null, array_values($data['lines'] ?? []), $data['period'] ?? null, $request->user(), (int) ($data['limit'] ?? 200),
+        )]);
     }
 
     /** Values for the report's own filter fields only. */

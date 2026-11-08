@@ -91,6 +91,23 @@ Abilities: `report-generator.model.manage`, `report-generator.report.create`,
 `report-generator.report.export`, `report-generator.report.view-all`,
 `report-generator.report.publish`.
 
+## Report filters
+
+Every report can be limited by period, lines, divisions and employees on
+the main topic's columns (`context` in the definition, or what the viewer
+picks). Tell the package which topic lists each, for the pickers:
+
+```php
+// config/report-generator.php
+'context' => [
+    'lines' => ['topic' => 'line', 'label' => 'name'],
+    'divisions' => ['topic' => 'line_division', 'label' => 'name'],
+    'employees' => ['topic' => 'user', 'label' => 'name'],
+],
+```
+
+The choices follow the user's row scope, the chosen lines and the period.
+
 ## Publishing reports
 
 A saved report can be published: it gets a permission named after it
@@ -280,6 +297,13 @@ division and employee columns.
   served from the cache for `cache.ttl` seconds. `EXPLAIN` estimates how many
   rows a report reads; `limits.refuse_above_est_rows` can refuse heavy
   previews.
+- `summary` counts the whole result and works out grand totals in one
+  query over it: sums and counts add up, min / max of min / max; averages,
+  distinct counts and formulas get no total rather than a wrong one.
+- Exports stream: rows are read unbuffered (MySQL) or through a server-side
+  cursor (PostgreSQL) and written to the response as CSV (with a UTF-8 BOM
+  for Excel) or XLSX (openspout, needs ext-zip). On the benchmark, all
+  5,000,000 visits go to CSV in about 12 s with peak memory up 6 MB.
 - Every run is recorded in `rg_query_log` (duration, rows, filtered fields)
   for the index advisor.
 
@@ -340,6 +364,8 @@ All paths are under the configured prefix (default `api/report-generator`).
 | GET | `/catalog?root=visits` | create reports | The topic's relation tree (fields and join path per node), plus a flat list |
 | POST | `/query/validate` | create reports | Check a definition: errors, columns, mode, estimated rows |
 | POST | `/query/rows` | create reports | One page of results (`definition`, `parameters`, `page`, `groups`, `query_id`) |
+| POST | `/query/summary` | create reports | Row count and grand totals of a definition |
+| POST | `/query/export` | create + export | A definition as `csv` or `xlsx`, streamed |
 | POST | `/query/values` | create reports | Distinct values of a field for filter pickers (`field`, `search`) |
 | POST | `/query/{id}/cancel` | create reports | Stop your own running query |
 
@@ -347,6 +373,9 @@ All paths are under the configured prefix (default `api/report-generator`).
 | GET | `/reports/{uuid}/view` | may open it | Name, saved report filters and parameters |
 | POST | `/reports/{uuid}/rows` | may open it | Run it: `context` (period, lines, divisions, employees), `parameters`, `page`, `groups` |
 | POST | `/reports/{uuid}/values` | may open it | Filter values for the report's own fields |
+| POST | `/reports/{uuid}/summary` | may open it | Row count and grand totals of the whole report (same body as `/rows`) |
+| POST | `/reports/{uuid}/export` | may open it + export | The whole report as `format` `csv` or `xlsx`, streamed |
+| GET | `/context/{lines\|divisions\|employees}` | any user | Choices for the report filters the user may see (`search`, `lines[]`, `period`) |
 | GET | `/permissions/roles` | publish | Roles a report can be given to |
 | GET / PUT / DELETE | `/reports/{uuid}/publish` | publish | Publishing settings (with a suggested permission) / publish: `permission`, `roles`, `in_menu`, `menu_group` / unpublish |
 | GET | `/reports` | create reports | Library: `scope` (all, mine, shared), `search`, `folder` |

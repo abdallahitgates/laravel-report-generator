@@ -1,10 +1,9 @@
 <?php
 
-use Abdalla\ReportGenerator\Models\Relationship;
+use Abdalla\ReportGenerator\Export\ReportWriter;
+use Abdalla\ReportGenerator\Facades\ReportGenerator;
 use Abdalla\ReportGenerator\Query\QueryEngine;
-use Abdalla\ReportGenerator\Schema\SchemaScanner;
-use Abdalla\ReportGenerator\Semantic\ModelPublisher;
-use Abdalla\ReportGenerator\Semantic\Published\SemanticModelRepository;
+use Abdalla\ReportGenerator\Tests\Fixtures\Bench;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -26,18 +25,16 @@ beforeEach(function () {
     $this->artisan('migrate')->assertSuccessful();
     config()->set('cache.default', 'array');
     config()->set('report-generator.data_connection', 'mysql_bench');
-    config()->set('report-generator.schema.eloquent.enabled', false);
+    config()->set('report-generator.topics.paths', []);
     config()->set('report-generator.limits.preview_timeout_ms', 120_000);
     Gate::define('report-generator.report.view-all', fn () => true);
 });
 
 it('runs typical reports on the benchmark dataset', function () {
-    $started = microtime(true);
-    $summary = app(SchemaScanner::class)->scan();
-    $scanMs = (int) round((microtime(true) - $started) * 1000);
-    Relationship::query()->update(['status' => Relationship::CONFIRMED]);
-    app(ModelPublisher::class)->publish();
-    app(SemanticModelRepository::class)->forget();
+    ReportGenerator::topics([
+        Bench\LineTopic::class, Bench\SpecialityTopic::class, Bench\BrickTopic::class, Bench\UserTopic::class,
+        Bench\DoctorTopic::class, Bench\ProductTopic::class, Bench\VisitTopic::class, Bench\SaleTopic::class,
+    ]);
 
     $visits = (int) DB::connection('mysql_bench')->table('visits')->count();
     $engine = app(QueryEngine::class);
@@ -88,6 +85,9 @@ it('runs typical reports on the benchmark dataset', function () {
     $lines = [sprintf('%-58s %10s %10s %8s %12s  %s', 'Report', 'cold ms', 'warm ms', 'rows', 'est. read', 'mode')];
     foreach ($reports as $name => [$definition, $groups]) {
         $cold = $engine->rows($definition, [], $user, 0, 200, $groups);
+        if ($cold['rows'] === []) {
+            fwrite(STDERR, "\n{$name}: no rows\n");
+        }
         $warm = $engine->rows($definition, [], $user, 0, 200, $groups);
         expect($cold['rows'])->not->toBeEmpty("{$name} returned nothing");
         expect($warm['meta']['cached'])->toBeTrue();
@@ -99,5 +99,34 @@ it('runs typical reports on the benchmark dataset', function () {
     $found = $engine->values('doctors.name', 'Dr 1234', 20, $user);
     $lines[] = sprintf('%-58s %10d %10s %8d', 'Filter values: search doctors by name', (microtime(true) - $values) * 1000, '-', count($found));
 
-    fwrite(STDERR, PHP_EOL.sprintf('Benchmark: %s visits, scan %d ms (%d tables)', number_format($visits), $scanMs, $summary->tables).PHP_EOL.implode(PHP_EOL, $lines).PHP_EOL);
+    // Count and grand totals of a whole-table aggregate.
+    $summary = $engine->summary($reports['Visits by line and month, whole table'][0], [], $user);
+    $lines[] = sprintf('%-58s %10d %10s %8d', 'Summary: count + totals, visits by line and month', $summary['duration_ms'], '-', $summary['rows']);
+
+    // Every visit to CSV, streamed: memory must stay flat.
+    $before = memory_get_peak_usage(true);
+    $started = microtime(true);
+    $result = $engine->stream(['root' => 'visits', 'fields' => [
+        ['ref' => 'visits.id', 'as' => 'id'],
+        ['ref' => 'visits.visit_date', 'as' => 'date'],
+        ['ref' => 'users.name', 'as' => 'rep'],
+        ['ref' => 'doctors.name', 'as' => 'doctor'],
+        ['ref' => 'visits.status', 'as' => 'status'],
+        ['ref' => 'visits.duration_min', 'as' => 'minutes'],
+    ]], [], $user);
+    $out = fopen('/dev/null', 'wb');
+    $counted = (function () use ($result, &$exported) {
+        $exported = 0;
+        foreach ($result['rows'] as $row) {
+            $exported++;
+            yield $row;
+        }
+    })();
+    app(ReportWriter::class)->csv($result['columns'], $counted, $out);
+    fclose($out);
+    $growth = (memory_get_peak_usage(true) - $before) / 1048576;
+    $lines[] = sprintf('%-58s %10d %10s %8s  peak memory +%.1f MB', 'Export: every visit to CSV (streamed)', (microtime(true) - $started) * 1000, '-', number_format($exported), $growth);
+    expect($exported)->toBe($visits)->and($growth)->toBeLessThan(64);
+
+    fwrite(STDERR, PHP_EOL.sprintf('Benchmark: %s visits', number_format($visits)).PHP_EOL.implode(PHP_EOL, $lines).PHP_EOL);
 });

@@ -124,6 +124,16 @@ return [
     |
     */
 
+    /*
+    | Report filter choices: the topic (and its label column) that lists the
+    | lines, divisions and employees viewers pick from. Null hides a picker.
+    */
+    'context' => [
+        'lines' => ['topic' => null, 'label' => 'name'],
+        'divisions' => ['topic' => null, 'label' => 'name'],
+        'employees' => ['topic' => null, 'label' => 'name'],
+    ],
+
     'permissions' => [
         // Class implementing Contracts\PermissionStore; null = spatie/laravel-permission when installed.
         'store' => null,

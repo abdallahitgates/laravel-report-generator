@@ -15,6 +15,7 @@ use Abdalla\ReportGenerator\Query\Execution\DatasetAccess;
 use Abdalla\ReportGenerator\Query\Execution\QueryCanceller;
 use Abdalla\ReportGenerator\Query\Planning\QueryPlanner;
 use Abdalla\ReportGenerator\ReportGenerator;
+use Abdalla\ReportGenerator\Query\Definition\DatePresets;
 use Abdalla\ReportGenerator\Security\PolicyContext;
 use Abdalla\ReportGenerator\Security\ScopeContext;
 use Abdalla\ReportGenerator\Semantic\Published\SemanticModel;
@@ -164,6 +165,151 @@ final class QueryEngine
                 'sql' => $this->generator->allows($user, Ability::ManageModel) ? $sql : null,
             ], fn ($v) => $v !== null),
         ];
+    }
+
+    /**
+     * How many rows the whole report has, and the grand total of every
+     * column that adds up, in one query over the report's result.
+     *
+     * @return array{rows: int, totals: array<string, int|float|null>, duration_ms: int, cached: bool}
+     */
+    public function summary(array $definition, array $parameters, ?Authenticatable $user): array
+    {
+        $timeoutMs = (int) config('report-generator.limits.preview_timeout_ms', 15000);
+        $compiled = $this->compile($definition, $parameters, $user, null, $timeoutMs);
+        $grammar = $compiled->connection->getQueryGrammar();
+
+        $inner = clone $compiled->query;
+        $inner->orders = null;
+        $inner->unionOrders = null;
+        $inner->limit = $inner->offset = null;
+
+        $selects = ['count(*) as '.$grammar->wrap('__rows')];
+        $totals = [];
+        foreach ($compiled->columns as $column) {
+            if (($column['total'] ?? null) !== null) {
+                $totals[$column['alias']] = $column;
+                $selects[] = "{$column['total']}(".$grammar->wrap('rg_s.'.$column['alias']).') as '.$grammar->wrap($column['alias']);
+            }
+        }
+        $query = $compiled->connection->query()
+            ->fromSub($inner, 'rg_s')
+            ->selectRaw($compiled->dialect->timeoutHint($timeoutMs).implode(', ', $selects));
+        // ROLLUP subtotal rows would be counted twice.
+        if (collect($compiled->columns)->contains('alias', '__subtotal')) {
+            $query->where('rg_s.__subtotal', 0);
+        }
+
+        $sql = $query->toSql();
+        $bindings = $query->getBindings();
+        $version = $this->models->current($user)->version;
+        $cacheKey = 'report-generator:summary:'.hash('sha256', implode('|', [$version, $compiled->connection->getName(), $sql, json_encode($bindings), $this->policies->fingerprint()]));
+
+        $started = microtime(true);
+        $cached = $this->cache->get($cacheKey);
+        if ($cached === null) {
+            $rows = (new ConcurrencyLimiter($this->cache))->run(
+                $user?->getAuthIdentifier(),
+                (int) ceil($timeoutMs / 1000) + 5,
+                fn () => $this->execute($compiled, $query, $timeoutMs, $user, null),
+            );
+            $row = $this->normalizeRows($rows, [['alias' => '__rows', 'type' => 'integer', 'kind' => 'measure'], ...array_values($totals)])[0] ?? [];
+            $cached = ['rows' => (int) ($row['__rows'] ?? 0), 'totals' => array_intersect_key($row, $totals)];
+            $this->cache->put($cacheKey, $cached, (int) config('report-generator.cache.ttl', 600));
+            $hit = false;
+        } else {
+            $hit = true;
+        }
+
+        return $cached + ['duration_ms' => (int) round((microtime(true) - $started) * 1000), 'cached' => $hit];
+    }
+
+    /**
+     * Choices for a report filter (lines, divisions, employees): id and label
+     * from the topic configured in report-generator.context, limited to what
+     * the user may see, the chosen lines and the period.
+     *
+     * @param  list<int|string>  $lines
+     * @return list<array{id: int|string, label: string}>
+     */
+    public function contextOptions(string $kind, ?string $search, array $lines, string|array|null $period, ?Authenticatable $user, int $limit = 200): array
+    {
+        $config = config("report-generator.context.{$kind}");
+        if (! is_array($config) || empty($config['topic'])) {
+            return [];
+        }
+
+        $model = $this->models->current($user);
+        $dataset = $model->dataset($config['topic']);
+        $access = new DatasetAccess($this->generator, $this->policies, $user, $model);
+        if ($dataset === null || ! $access->allows($dataset->key, true)) {
+            return [];
+        }
+
+        [$from, $to] = match (true) {
+            is_array($period) && count($period) === 2 => [substr((string) $period[0], 0, 10).' 00:00:00', substr((string) $period[1], 0, 10).' 23:59:59'],
+            is_string($period) && $period !== '' => DatePresets::resolve($period) ?? [null, null],
+            default => [null, null],
+        };
+        $connection = $this->dataConnection();
+        $label = $config['label'] ?? 'name';
+        $id = $dataset->primaryKey[0] ?? 'id';
+
+        $query = $connection->query()
+            ->from("{$dataset->sourceName} as t0")
+            ->select(["t0.{$id} as id", "t0.{$label} as label"])
+            ->orderBy("t0.{$label}")
+            ->limit(max(1, min($limit, 500)));
+        $dataset->constrain($query, 't0');
+
+        if ($lines !== [] && $kind !== 'lines' && $dataset->lineColumn) {
+            $query->whereIn("t0.{$dataset->lineColumn}", $lines);
+        }
+        if ($from !== null && $dataset->validFromColumn) {
+            $query->where("t0.{$dataset->validFromColumn}", '<=', $to);
+            if ($dataset->validToColumn) {
+                $query->where(fn ($q) => $q->whereNull("t0.{$dataset->validToColumn}")->orWhere("t0.{$dataset->validToColumn}", '>=', $from));
+            }
+        }
+        if ($search !== null && $search !== '') {
+            $escaped = str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search);
+            $query->whereRaw($connection->getQueryGrammar()->wrap("t0.{$label}").' '.$this->dialects->for($connection)->likeOperator()." ? ESCAPE '!'", ['%'.$escaped.'%']);
+        }
+
+        $this->policies->apply($query, new PolicyContext($dataset->key, 't0', $user));
+        if (! $access->viewAll()) {
+            $this->policies->applyScope($query, new ScopeContext($dataset, 't0', $user, $from, $to, $lines));
+        }
+
+        return array_map(fn ($r) => ['id' => is_numeric($r->id) ? (int) $r->id : $r->id, 'label' => (string) $r->label], $query->get()->all());
+    }
+
+    /**
+     * Every row of a report, streamed: constant memory whatever the size
+     * (unbuffered on MySQL, a server-side cursor on PostgreSQL).
+     *
+     * @return array{columns: list<array>, rows: \Generator<int, array<string, mixed>>}
+     */
+    public function stream(array $definition, array $parameters, ?Authenticatable $user): array
+    {
+        $timeoutMs = (int) config('report-generator.limits.export_timeout_ms', 900000);
+        $compiled = $this->compile($definition, $parameters, $user, null, $timeoutMs);
+        $columns = array_values(array_filter($compiled->columns, fn ($c) => $c['kind'] !== 'meta'));
+        $chunk = max(100, (int) config('report-generator.exports.chunk', 5000));
+
+        $rows = (function () use ($compiled, $columns, $timeoutMs, $chunk, $user) {
+            $started = microtime(true);
+            $count = 0;
+            foreach ((new \Abdalla\ReportGenerator\Export\ResultStreamer())->stream($compiled, $timeoutMs, $chunk) as $batch) {
+                foreach ($this->normalizeRows($batch, $columns) as $row) {
+                    $count++;
+                    yield $row;
+                }
+            }
+            $this->log($compiled, $user, $compiled->sql(), null, $count, (int) round((microtime(true) - $started) * 1000), false);
+        })();
+
+        return ['columns' => $columns, 'rows' => $rows];
     }
 
     /**

@@ -69,13 +69,13 @@ final class QueryPlanner
 
         if ($spec->field === self::ROW_COUNT) {
             if ($spec->aggregation !== Aggregation::Count && $spec->aggregation !== Aggregation::CountDistinct) {
-                throw new QueryException('INVALID_AGGREGATION', "\"Number of {$dataset->label}\" can only be counted.", "{$at}.agg");
+                throw new QueryException('INVALID_AGGREGATION', "\"".($dataset->countLabel ?? "Number of {$dataset->label}")."\" can only be counted.", "{$at}.agg");
             }
             if ($dataset->primaryKey === [] && ! $node->isRoot()) {
                 throw new QueryException('NO_PRIMARY_KEY', "{$dataset->label} has no primary key, so its rows cannot be counted through a join.", "{$at}.ref");
             }
 
-            return new PlannedField($spec, PlannedField::MEASURE, DataType::Integer, $spec->label ?? "Number of {$dataset->label}", $node);
+            return new PlannedField($spec, PlannedField::MEASURE, DataType::Integer, $spec->label ?? $dataset->countLabel ?? "Number of {$dataset->label}", $node);
         }
 
         $field = $dataset->field($spec->field)
