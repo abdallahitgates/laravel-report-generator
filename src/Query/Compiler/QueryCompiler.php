@@ -708,6 +708,8 @@ final class QueryCompiler
                 'format' => $field->spec->format ?? ($field->kind === PlannedField::MEASURE && $field->spec->aggregation !== Aggregation::Count && ! $field->isRowCount() ? $field->field?->format : null),
                 'dataset' => $field->node?->dataset->key,
                 'total' => $this->grandTotal($field),
+                // Date buckets (month, week, ...) so clients label them "Mar 2026", not "1 Mar 2026".
+                'grain' => $field->spec->grain,
             ];
         }
         if ($this->plan->definition->subtotals) {
