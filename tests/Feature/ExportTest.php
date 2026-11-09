@@ -152,3 +152,42 @@ it('lists report filter choices the user may see', function () {
 
     $this->actingAs($this->admin)->getJson('/api/report-generator/context/nope')->assertNotFound();
 });
+
+it('keeps exported text from running as an Excel formula', function () {
+    $writer = new ReportWriter();
+    $out = fopen('php://memory', 'w+');
+    $writer->csv(
+        [['alias' => 'name', 'label' => 'Name'], ['alias' => 'n', 'label' => 'N']],
+        [['name' => '=HYPERLINK("http://x","click")', 'n' => -5], ['name' => '+1 555', 'n' => 3], ['name' => '@SUM(A1)', 'n' => '-2.5'], ['name' => 'Dr Ali', 'n' => 1]],
+        $out,
+    );
+    rewind($out);
+    $lines = explode("\n", trim(substr(stream_get_contents($out), 3)));
+
+    expect($lines[1])->toBe("\"'=HYPERLINK(\"\"http://x\"\",\"\"click\"\")\",-5")
+        ->and($lines[2])->toBe("\"'+1 555\",3")
+        ->and($lines[3])->toBe("'@SUM(A1),-2.5")
+        ->and($lines[4])->toBe('"Dr Ali",1');
+});
+
+it('counts an export as a running report', function () {
+    EngineFixture::create('testing');
+    EngineFixture::publish('testing');
+    config()->set('report-generator.limits.max_concurrent_per_user', 1);
+    config()->set('report-generator.limits.queue_wait_ms', 200);
+
+    $result = app(QueryEngine::class)->stream(['root' => 'visits', 'fields' => [['ref' => 'visits.id', 'as' => 'id']]], [], $this->admin);
+    $first = $result['rows']->current(); // the export is being written
+
+    $error = null;
+    try {
+        app(QueryEngine::class)->rows(['root' => 'visits', 'fields' => [['ref' => 'visits.__rows', 'agg' => 'count', 'as' => 'n']]], [], $this->admin, 0, 10);
+    } catch (\Abdalla\ReportGenerator\Query\QueryException $e) {
+        $error = $e;
+    }
+    iterator_to_array($result['rows']); // finish the export: the slot is released
+
+    expect($first['id'])->toBe(1)
+        ->and($error?->errorCode)->toBe('TOO_MANY_QUERIES')
+        ->and((int) app(QueryEngine::class)->rows(['root' => 'visits', 'fields' => [['ref' => 'visits.__rows', 'agg' => 'count', 'as' => 'n']]], [], $this->admin, 0, 10)['rows'][0]['n'])->toBe(8);
+});

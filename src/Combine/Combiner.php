@@ -142,6 +142,22 @@ final class Combiner
             return [$hit['columns'], $hit['rows'], true];
         }
 
+        // Running the reports is as heavy as a report query: it takes a slot.
+        return (new \Abdalla\ReportGenerator\Query\Execution\ConcurrencyLimiter($this->cache))->run(
+            $user?->getAuthIdentifier(),
+            (int) ceil((int) config('report-generator.limits.export_timeout_ms', 900000) / 1000),
+            fn () => $this->build($plan, $cacheKey),
+        );
+    }
+
+    /** @return array{0: list<array>, 1: list<array<string, mixed>>, 2: bool} */
+    private function build(array $plan, string $cacheKey): array
+    {
+        // Another request may have built it while this one waited for a slot.
+        if (($hit = $this->cache->get($cacheKey)) !== null) {
+            return [$hit['columns'], $hit['rows'], true];
+        }
+
         $run = $plan['run'];
         $byId = [];
         $columnsMeta = [];

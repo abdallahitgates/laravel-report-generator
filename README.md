@@ -386,6 +386,15 @@ division and employee columns.
   cursor (PostgreSQL) and written to the response as CSV (with a UTF-8 BOM
   for Excel) or XLSX (openspout, needs ext-zip). On the benchmark, all
   5,000,000 visits go to CSV in about 12 s with peak memory up 6 MB.
+- A request waits up to `limits.queue_wait_ms` (15 s) for a free slot
+  before "try again", so a dashboard asking for all its widgets at once is
+  served in turn; exports hold a slot while the file is written, combined
+  reports while their reports run.
+- Exported CSV text that Excel would run as a formula (`=`, `+`, `-`, `@`
+  first) is prefixed with an apostrophe.
+- `php artisan report-generator:prune` (schedule it daily) trims the query
+  log and finished runs (`prune.query_log_days`, 90) and removes reports
+  and dashboards deleted more than `prune.deleted_days` (30) ago.
 - Every run is recorded in `rg_query_log` (duration, rows, filtered fields)
   for the index advisor.
 

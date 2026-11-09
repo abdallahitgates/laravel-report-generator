@@ -48,7 +48,7 @@ final class ReportWriter
         $aliases = array_column($columns, 'alias');
         $i = 0;
         foreach ($rows as $row) {
-            fputcsv($out, array_map(fn ($a) => $this->scalar($row[$a] ?? null), $aliases));
+            fputcsv($out, array_map(fn ($a) => $this->csvSafe($this->scalar($row[$a] ?? null)), $aliases));
             if (++$i % 1000 === 0) {
                 fflush($out);
             }
@@ -67,6 +67,17 @@ final class ReportWriter
             $writer->addRow(Row::fromValues(array_map(fn ($a) => $this->scalar($row[$a] ?? null), $aliases)));
         }
         $writer->close();
+    }
+
+    /**
+     * Text that Excel would run as a formula (=, +, -, @, tab, return at the
+     * start: "CSV injection") is prefixed with an apostrophe. Numbers stay.
+     */
+    private function csvSafe(mixed $value): mixed
+    {
+        return is_string($value) && $value !== '' && ! is_numeric($value) && in_array($value[0], ['=', '+', '-', '@', "\t", "\r"], true)
+            ? "'".$value
+            : $value;
     }
 
     private function scalar(mixed $value): mixed

@@ -334,16 +334,31 @@ it('serves a repeated report from the cache', function () {
         ->and(runReport($engine, $definition)['meta']['cached'])->toBeTrue();
 });
 
-it('limits how many reports one user runs at once', function () {
+it('limits how many reports one user runs at once, after waiting for a slot', function () {
     $engine = engineFor('testing');
     config()->set('report-generator.limits.max_concurrent_per_user', 1);
+    config()->set('report-generator.limits.queue_wait_ms', 300);
     $held = cache()->lock('report-generator:slot:user:1:0', 30);
     $held->get();
 
+    $started = microtime(true);
     $error = reportError(fn () => runReport($engine, ['root' => 'visits', 'fields' => [['ref' => 'visits.__rows', 'agg' => 'count', 'as' => 'n']]]));
+    $waited = microtime(true) - $started;
     $held->release();
 
-    expect($error->errorCode)->toBe('TOO_MANY_QUERIES')->and($error->status)->toBe(429);
+    expect($error->errorCode)->toBe('TOO_MANY_QUERIES')->and($error->status)->toBe(429)
+        ->and($waited)->toBeGreaterThanOrEqual(0.3);
+});
+
+it('runs as soon as a slot frees up while waiting', function () {
+    $engine = engineFor('testing');
+    config()->set('report-generator.limits.max_concurrent_per_user', 1);
+    config()->set('report-generator.limits.queue_wait_ms', 3000);
+    // Held by "another request" that finishes within a second.
+    cache()->lock('report-generator:slot:user:1:0', 1)->get();
+
+    $result = runReport($engine, ['root' => 'visits', 'fields' => [['ref' => 'visits.__rows', 'agg' => 'count', 'as' => 'n']]]);
+    expect((int) $result['rows'][0]['n'])->toBe(8);
 });
 
 it('explains mistakes with a code and where they are', function (string $definitionPatch, string $code, string $path) {

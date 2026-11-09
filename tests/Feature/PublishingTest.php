@@ -134,6 +134,15 @@ it('stops opening the report once it is unpublished', function () {
     $this->actingAs($this->rep->fresh())->getJson('/api/report-generator/menu')->assertJsonCount(0, 'data');
 });
 
+it('does not let publishers publish what they cannot open', function () {
+    // A publisher who is not an admin and does not own the report.
+    $publisher = Member::query()->create(['name' => 'Publisher']);
+    Gate::define('report-generator.report.publish', fn ($user) => in_array($user->name, ['Admin', 'Publisher'], true));
+
+    $this->actingAs($publisher)->getJson('/api/report-generator/reports/'.$this->report['uuid'].'/publish')->assertForbidden();
+    $this->actingAs($publisher)->putJson('/api/report-generator/reports/'.$this->report['uuid'].'/publish', ['permission' => 'x_y', 'roles' => []])->assertForbidden();
+});
+
 it('validates the permission name and roles', function () {
     publish(['permission' => 'Show Reports!'])->assertStatus(422)->assertJsonValidationErrors('permission');
     publish(['roles' => ['Nobody']])->assertStatus(422)->assertJsonValidationErrors('roles.0');

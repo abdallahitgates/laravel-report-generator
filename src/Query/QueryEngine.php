@@ -334,15 +334,21 @@ final class QueryEngine
         $chunk = max(100, (int) config('report-generator.exports.chunk', 5000));
 
         $rows = (function () use ($compiled, $columns, $timeoutMs, $chunk, $user) {
-            $started = microtime(true);
-            $count = 0;
-            foreach ((new \Abdalla\ReportGenerator\Export\ResultStreamer())->stream($compiled, $timeoutMs, $chunk) as $batch) {
-                foreach ($this->normalizeRows($batch, $columns) as $row) {
-                    $count++;
-                    yield $row;
+            // An export counts as a running report while the file is written.
+            $release = (new ConcurrencyLimiter($this->cache))->hold($user?->getAuthIdentifier(), (int) ceil($timeoutMs / 1000) + 30);
+            try {
+                $started = microtime(true);
+                $count = 0;
+                foreach ((new \Abdalla\ReportGenerator\Export\ResultStreamer())->stream($compiled, $timeoutMs, $chunk) as $batch) {
+                    foreach ($this->normalizeRows($batch, $columns) as $row) {
+                        $count++;
+                        yield $row;
+                    }
                 }
+                $this->log($compiled, $user, $compiled->sql(), null, $count, (int) round((microtime(true) - $started) * 1000), false);
+            } finally {
+                $release();
             }
-            $this->log($compiled, $user, $compiled->sql(), null, $count, (int) round((microtime(true) - $started) * 1000), false);
         })();
 
         return ['columns' => $columns, 'rows' => $rows];

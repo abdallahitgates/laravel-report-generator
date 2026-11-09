@@ -89,6 +89,8 @@ return [
         'export_timeout_ms' => 900_000,
         'max_concurrent_per_user' => 2,
         'max_concurrent_global' => 10,
+        // How long a request waits for a free slot before "try again" (a dashboard asks for all its widgets at once).
+        'queue_wait_ms' => 15_000,
         // Run EXPLAIN before a preview to report how many rows it will read.
         'explain' => true,
         // Refuse previews whose EXPLAIN estimate reads more rows than this (null = never refuse).
@@ -104,6 +106,15 @@ return [
     ],
 
     'query_log' => true,
+
+    /*
+    | report-generator:prune (schedule it daily): how long to keep the query
+    | log and finished runs, and deleted reports / dashboards.
+    */
+    'prune' => [
+        'query_log_days' => 90,
+        'deleted_days' => 30,
+    ],
 
     'exports' => [
         'disk' => env('RG_EXPORT_DISK', 'local'),

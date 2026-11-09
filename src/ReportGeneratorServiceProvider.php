@@ -55,6 +55,7 @@ class ReportGeneratorServiceProvider extends ServiceProvider
             $this->commands([
                 InstallCommand::class,
                 MakeTopicCommand::class,
+                \Abdalla\ReportGenerator\Console\PruneCommand::class,
             ]);
         }
     }

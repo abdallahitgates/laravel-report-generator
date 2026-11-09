@@ -30,8 +30,10 @@ class PublishController extends Controller
         return new JsonResponse(['data' => $this->permissions->roles()]);
     }
 
-    public function show(Report $report): JsonResponse
+    public function show(Request $request, Report $report): JsonResponse
     {
+        $this->authorizeOpen($request, $report);
+
         return new JsonResponse(['data' => $this->settings($report)]);
     }
 
@@ -47,8 +49,10 @@ class PublishController extends Controller
 
     // Dashboards publish the same way.
 
-    public function showDashboard(Dashboard $dashboard): JsonResponse
+    public function showDashboard(Request $request, Dashboard $dashboard): JsonResponse
     {
+        $this->authorizeOpen($request, $dashboard);
+
         return new JsonResponse(['data' => $this->settings($dashboard)]);
     }
 
@@ -64,6 +68,7 @@ class PublishController extends Controller
 
     private function publish(Request $request, Report|Dashboard $report): JsonResponse
     {
+        $this->authorizeOpen($request, $report);
         // One permission opens one report or dashboard.
         $other = $report instanceof Report ? new Dashboard() : new Report();
         $data = $request->validate([
@@ -100,9 +105,19 @@ class PublishController extends Controller
      */
     private function unpublish(Report|Dashboard $report): JsonResponse
     {
+        $this->authorizeOpen(request(), $report);
         $report->forceFill(['permission' => null, 'in_menu' => false, 'published_at' => null])->save();
 
         return new JsonResponse(['data' => $this->settings($report)]);
+    }
+
+    /** Nobody publishes what they cannot open themselves. */
+    private function authorizeOpen(Request $request, Report|Dashboard $report): void
+    {
+        $allowed = $report instanceof Report
+            ? $this->access->canView($report, $request->user())
+            : $this->access->canViewDashboard($report, $request->user());
+        abort_unless($allowed, 403, 'You cannot publish what you cannot open.');
     }
 
     private function settings(Report|Dashboard $report): array
