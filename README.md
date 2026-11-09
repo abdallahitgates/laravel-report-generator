@@ -10,7 +10,7 @@ server, and exports stream with constant memory.
 
 The UI ships separately as [`@abdalla/report-generator-vue`](https://github.com/abdallahitgates/report-generator-vue).
 
-> Version **0.6.0** (v2 phase P4). Topics defined in code replace the
+> Version **0.7.0** (v2 phase P5). Topics defined in code replace the
 > database scan and Model Studio of 0.1. The query engine, saved reports and
 > the builder UI are unchanged.
 
