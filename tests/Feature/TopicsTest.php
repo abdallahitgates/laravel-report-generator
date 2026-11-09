@@ -4,6 +4,7 @@ use Abdalla\ReportGenerator\Facades\ReportGenerator;
 use Abdalla\ReportGenerator\Query\QueryEngine;
 use Abdalla\ReportGenerator\Security\ScopeContext;
 use Abdalla\ReportGenerator\Semantic\Published\SemanticModelRepository;
+use Abdalla\ReportGenerator\Tests\Fixtures\Engine\DoctorsTopic;
 use Abdalla\ReportGenerator\Tests\Fixtures\Engine\UsersTopic;
 use Abdalla\ReportGenerator\Tests\Fixtures\Engine\VisitsTopic;
 use Abdalla\ReportGenerator\Tests\Fixtures\Topics\LonelyVisitsTopic;
@@ -24,7 +25,11 @@ beforeEach(function () {
     Gate::define('report-generator.model.manage', fn ($user) => (int) $user->id === 1);
 });
 
-afterEach(fn () => EngineFixture::drop('testing'));
+afterEach(function () {
+    EngineFixture::drop('testing');
+    DoctorsTopic::$throughVia = null;
+    DoctorsTopic::$startableFlag = true;
+});
 
 function fixtureEngine(): QueryEngine
 {
@@ -328,4 +333,54 @@ it('describes every topic for the admin page', function () {
         ->and($visits['columns'])->toBe(['period' => 'visit_date', 'line' => null, 'division' => null, 'employee' => 'user_id'])
         ->and(array_column($visits['relations'], 'topic'))->toBe(['users', 'doctors'])
         ->and(collect($visits['fields'])->firstWhere('key', 'status')['options'])->toBe(['done' => 'Done', 'missed' => 'Missed']);
+});
+
+it('walks a link table as one relation', function () {
+    DoctorsTopic::$throughVia = 'visits';
+    $engine = fixtureEngine();
+    $admin = new GenericUser(['id' => 1]);
+
+    $tree = $engine->catalog('doctors', $admin)['tree'];
+    $byName = fn (array $node) => collect($node['relations'])->keyBy('name');
+    $visitors = $byName($tree)['visitors'];
+    $nested = $byName($byName($tree)['visits'])['employee'];
+
+    expect($visitors['topic'])->toBe('users')
+        ->and($visitors['label'])->toBe('Employees who visited')
+        ->and($visitors['multiplies_rows'])->toBeTrue()
+        ->and($visitors['path'])->toBe($nested['path'])
+        ->and($visitors['path'])->toBe([-EngineFixture::relationshipId('visits', 'doctor_id'), EngineFixture::relationshipId('visits', 'user_id')]);
+
+    $run = fn (array $path) => $engine->rows(['root' => 'doctors', 'fields' => [
+        ['ref' => 'users.name', 'path' => $path, 'as' => 'employee'],
+        ['ref' => 'doctors.__rows', 'agg' => 'count', 'as' => 'n'],
+    ], 'sort' => [['field' => 'employee', 'dir' => 'asc']]], [], $admin, 0, 10)['rows'];
+    expect($run($visitors['path']))->toBe($run($nested['path']))->not->toBe([]);
+
+    // One path in the flat list, under the shorter name.
+    $users = collect($engine->catalog('doctors', $admin)['datasets'])->firstWhere('key', 'users');
+    expect(array_column($users['paths'], 'description'))->toContain('Doctors → Employees who visited')->not->toContain('Doctors → Visits → Employee');
+
+    $doctors = collect(collect(app(QueryEngine::class)->topicsOverview($admin)['groups'])->firstWhere('name', 'List')['topics'])->firstWhere('key', 'doctors');
+    expect(collect($doctors['relations'])->firstWhere('name', 'visitors'))->toMatchArray([
+        'type' => 'hasMany', 'topic' => 'users', 'foreign_key' => null, 'through' => 'Visits',
+    ]);
+});
+
+it('refuses a through relation that does not name plain relations', function (string $via) {
+    DoctorsTopic::$throughVia = $via;
+    EngineFixture::create('testing');
+    EngineFixture::publish('testing');
+
+    expect(fn () => app(TopicRegistry::class)->all())->toThrow(InvalidTopicException::class);
+})->with(['missing relation' => 'nope', 'through a through' => 'visitors']);
+
+it('keeps link tables out of the start picker but still opens them', function () {
+    DoctorsTopic::$startableFlag = false;
+    $engine = fixtureEngine();
+    $admin = new GenericUser(['id' => 1]);
+
+    $roots = array_column($engine->catalog(null, $admin)['datasets'], 'key');
+    expect($roots)->not->toContain('doctors')->toContain('visits')
+        ->and($engine->catalog('doctors', $admin)['tree']['topic'])->toBe('doctors');
 });

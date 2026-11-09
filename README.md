@@ -270,6 +270,20 @@ date are suggested as the filter columns.
   working after a rename.
 - **Relations** are declared from either side, and stored once. Builders walk
   them as a tree up to `topics.max_depth` levels from the report's topic.
+- **Through relations** skip a link table, so builders see one step:
+  Doctors → Accounts instead of Doctors → Account doctors → Account.
+
+  ```php
+  Relation::hasMany('accountLinks', 'Account links', AccountDoctorsTopic::class, 'doctor_id'),
+  Relation::through('accounts', 'Accounts', 'accountLinks', 'account'),  // relation names
+  ```
+
+  The first name is a relation of this topic, the second a relation of the
+  topic it reaches; both must be plain (`belongsTo` / `hasMany` / `hasOne`).
+  Keep the link relation too when its own columns (dates, class) matter.
+- **Link tables** (user ↔ role, line ↔ product): `public bool $startable =
+  false` keeps them out of the builder's start picker. They stay reachable
+  through relations, and reports already built on them still open.
 - **Validity spans**: for rows valid from one date to another (structure
   assignments), set `$validFromColumn = 'from_date'` and
   `$validToColumn = 'to_date'` instead of `$dateColumn`: the report period

@@ -17,9 +17,16 @@ class DoctorsTopic extends Topic
     /** Lets a test expose speciality_id to the row scope. */
     public static bool $scopeBySpeciality = false;
 
+    /** Lets a test add "employees who visited" (through visits) as one step. */
+    public static ?string $throughVia = null;
+
+    /** Lets a test keep doctors out of the start picker. */
+    public static bool $startableFlag = true;
+
     public function __construct()
     {
         $this->scopeColumns = static::$scopeBySpeciality ? ['speciality' => 'speciality_id'] : [];
+        $this->startable = static::$startableFlag;
     }
 
     public function fields(): array
@@ -41,6 +48,7 @@ class DoctorsTopic extends Topic
             Relation::belongsTo('line', 'Line', LinesTopic::class, 'line_id'),
             Relation::hasMany('visits', 'Visits', VisitsTopic::class, 'doctor_id'),
             Relation::hasMany('sales', 'Sales', SalesTopic::class, 'doctor_id'),
+            ...(static::$throughVia ? [Relation::through('visitors', 'Employees who visited', static::$throughVia, 'employee')] : []),
         ];
     }
 }

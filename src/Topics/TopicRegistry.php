@@ -60,8 +60,13 @@ final class TopicRegistry
         }
 
         foreach ($topics as $topic) {
+            $names = [];
             foreach ($topic->relations() as $relation) {
-                if (! isset($classes[$relation->topic])) {
+                if (isset($names[$relation->name])) {
+                    throw new InvalidTopicException($topic::class." declares the relation [{$relation->name}] twice.");
+                }
+                $names[$relation->name] = true;
+                if (! $relation->isThrough() && ! isset($classes[$relation->topic])) {
                     throw new InvalidTopicException(
                         $topic::class." relation [{$relation->name}] points to {$relation->topic}, which is not a registered topic."
                     );
@@ -69,7 +74,66 @@ final class TopicRegistry
             }
         }
 
-        return $this->resolved = $topics;
+        $this->resolved = $topics;
+        try {
+            foreach ($topics as $topic) {
+                foreach ($topic->relations() as $relation) {
+                    if ($relation->isThrough()) {
+                        $this->hops($topic, $relation);
+                    }
+                }
+            }
+        } catch (InvalidTopicException $e) {
+            $this->resolved = null;
+            throw $e;
+        }
+
+        return $topics;
+    }
+
+    /** A relation of a topic by name, or null. */
+    public function relation(Topic $topic, string $name): ?Relation
+    {
+        foreach ($topic->relations() as $relation) {
+            if ($relation->name === $name) {
+                return $relation;
+            }
+        }
+
+        return null;
+    }
+
+    /** The topic a relation leads to (for a through relation: the far end). */
+    public function target(Topic $from, Relation $relation): Topic
+    {
+        $hops = $this->hops($from, $relation);
+
+        return end($hops)[2];
+    }
+
+    /**
+     * The plain relations a relation walks: one hop, or two for a through
+     * relation, each as [from topic, relation, to topic].
+     *
+     * @return list<array{0: Topic, 1: Relation, 2: Topic}>
+     */
+    public function hops(Topic $from, Relation $relation): array
+    {
+        if (! $relation->isThrough()) {
+            return [[$from, $relation, $this->byClass($relation->topic)]];
+        }
+
+        $via = $this->relation($from, (string) $relation->via);
+        if ($via === null || $via->isThrough()) {
+            throw new InvalidTopicException($from::class." relation [{$relation->name}] goes through [{$relation->via}], which is not a plain relation of the topic.");
+        }
+        $middle = $this->byClass($via->topic);
+        $then = $this->relation($middle, (string) $relation->then);
+        if ($then === null || $then->isThrough()) {
+            throw new InvalidTopicException($from::class." relation [{$relation->name}] continues with [{$relation->then}], which is not a plain relation of ".$middle::class.'.');
+        }
+
+        return [[$from, $via, $middle], [$middle, $then, $this->byClass($then->topic)]];
     }
 
     public function has(string $key): bool

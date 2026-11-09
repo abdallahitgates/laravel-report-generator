@@ -23,7 +23,6 @@ final class TopicModelBuilder
     public function build(TopicRegistry $registry, ?Authenticatable $user, Closure $rolesOf): SemanticModel
     {
         $topics = $registry->all();
-        $keyOf = fn (string $class) => $registry->byClass($class)->key();
 
         $datasets = [];
         foreach ($topics as $key => $topic) {
@@ -81,6 +80,9 @@ final class TopicModelBuilder
         $relationships = [];
         foreach ($topics as $key => $topic) {
             foreach ($topic->relations() as $relation) {
+                if ($relation->isThrough()) {
+                    continue; // walks the edges of the plain relations it names
+                }
                 $edge = self::edge($topic, $relation, $registry->byClass($relation->topic));
                 $relationships[$edge->id] ??= $edge;
             }
@@ -139,7 +141,7 @@ final class TopicModelBuilder
                 $topic->table(),
                 $topic->conditions(),
                 array_map(fn (Field $f) => [$f->keyName(), $f->column, $f->type()->value], $topic->fields()),
-                array_map(fn (Relation $r) => [$r->name, $r->topic, $r->foreignKey, $r->otherKey], $topic->relations()),
+                array_map(fn (Relation $r) => [$r->name, $r->topic, $r->foreignKey, $r->otherKey, $r->via, $r->then], $topic->relations()),
             ];
         }
 

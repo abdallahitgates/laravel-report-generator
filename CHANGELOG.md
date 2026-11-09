@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.0
+
+- `Relation::through('accounts', 'Accounts', 'accountLinks', 'account')`:
+  one relation over a link table, shown as one step in the builder (its
+  join path is the two plain relations, so reports match either way).
+- `Topic::$startable = false` keeps link tables out of the start picker.
+- A topic reachable by the same join path under two names is listed once,
+  under the shorter name.
+- Topics refuse a relation name declared twice.
+
 ## 0.8.0
 
 Hardening before ProCRM's first release.

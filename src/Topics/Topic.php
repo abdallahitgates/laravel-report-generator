@@ -77,6 +77,14 @@ abstract class Topic
      */
     public bool $lookup = false;
 
+    /**
+     * Offered as a report's main topic in the builder's start picker. Set
+     * false on link tables (user <-> role, line <-> product): they stay
+     * reachable through relations, and reports already built on them
+     * still open.
+     */
+    public bool $startable = true;
+
     /** Gate ability a user needs to report on this topic (admins with view-all always can). */
     public ?string $permission = null;
 

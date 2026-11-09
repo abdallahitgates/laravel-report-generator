@@ -439,7 +439,10 @@ final class QueryEngine
         $access = new DatasetAccess($this->generator, $this->policies, $user, $model);
 
         if ($root === null) {
-            $allowed = array_values(array_filter($model->datasets, fn (PublishedDataset $d) => $access->allows($d->key, true)));
+            $allowed = array_values(array_filter(
+                $model->datasets,
+                fn (PublishedDataset $d) => (! $this->topics->has($d->key) || $this->topics->get($d->key)->startable) && $access->allows($d->key, true),
+            ));
             $groups = [];
             foreach ($allowed as $dataset) {
                 $groups[$dataset->group ?? $dataset->label][] = $this->topicSummary($dataset);
@@ -462,8 +465,16 @@ final class QueryEngine
             $labels = [...$labels, $node['label']];
             $entry = &$flat[$node['topic']];
             $entry ??= ['key' => $node['topic'], 'label' => $node['topic_label'], 'row_estimate' => null, 'default_time_field' => $node['default_time_field'], 'paths' => [], 'fields' => $node['fields']];
+            // A through relation and the two steps it skips share one path:
+            // list it once, under the shorter name.
             if ($node['path'] !== []) {
-                $entry['paths'][] = ['path' => $node['path'], 'description' => implode(' → ', $labels), 'multiplies_rows' => $node['multiplies_rows']];
+                $option = ['path' => $node['path'], 'description' => implode(' → ', $labels), 'multiplies_rows' => $node['multiplies_rows']];
+                $same = array_search($node['path'], array_column($entry['paths'], 'path'), true);
+                if ($same === false) {
+                    $entry['paths'][] = $option;
+                } elseif (count($labels) < substr_count($entry['paths'][$same]['description'], ' → ') + 1) {
+                    $entry['paths'][$same] = $option;
+                }
             }
             unset($entry);
             foreach ($node['relations'] as $child) {
@@ -490,6 +501,7 @@ final class QueryEngine
                 'permission' => $topic->permission,
                 'public' => $topic->public,
                 'lookup' => $topic->lookup,
+                'startable' => $topic->startable,
                 'scope_columns' => (object) $topic->scopeColumns,
                 'conditions' => (object) $topic->conditions(),
                 'columns' => [
@@ -499,14 +511,21 @@ final class QueryEngine
                     'employee' => $topic->employeeColumn,
                 ],
                 'fields' => $this->fieldList($dataset),
-                'relations' => array_map(fn (Relation $r) => [
-                    'name' => $r->name,
-                    'label' => $r->label,
-                    'type' => $r->type,
-                    'topic' => $this->topics->byClass($r->topic)->key(),
-                    'topic_label' => $this->topics->byClass($r->topic)->label(),
-                    'foreign_key' => $r->foreignKey,
-                ], $topic->relations()),
+                'relations' => array_map(function (Relation $r) use ($topic) {
+                    $hops = $this->topics->hops($topic, $r);
+                    $target = end($hops)[2];
+                    $many = array_filter($hops, fn ($hop) => $hop[1]->type === Relation::HAS_MANY) !== [];
+
+                    return [
+                        'name' => $r->name,
+                        'label' => $r->label,
+                        'type' => $r->isThrough() ? ($many ? Relation::HAS_MANY : Relation::BELONGS_TO) : $r->type,
+                        'topic' => $target->key(),
+                        'topic_label' => $target->label(),
+                        'foreign_key' => $r->isThrough() ? null : $r->foreignKey,
+                        'through' => $r->isThrough() ? $hops[0][2]->label() : null,
+                    ];
+                }, $topic->relations()),
             ];
         }
 
@@ -556,17 +575,26 @@ final class QueryEngine
 
         if ($depth < (int) config('report-generator.topics.max_depth', 3)) {
             foreach ($topic->relations() as $relation) {
-                $target = $this->topics->byClass($relation->topic);
-                if (in_array($target->key(), [...$ancestors, $key], true) || ! $access->allows($target->key())) {
+                $hops = $this->topics->hops($topic, $relation);
+                $target = end($hops)[2];
+                if (in_array($target->key(), [...$ancestors, $key], true)) {
                     continue;
                 }
-                [, $signed] = TopicModelBuilder::step($topic, $relation, $target);
+                $steps = [];
+                $many = $multiplies;
+                foreach ($hops as [$from, $hop, $to]) {
+                    if (! $access->allows($to->key())) {
+                        continue 2;
+                    }
+                    $steps[] = TopicModelBuilder::step($from, $hop, $to)[1];
+                    $many = $many || $hop->type === Relation::HAS_MANY;
+                }
                 $children[] = $this->topicNode(
                     $target,
-                    [...$path, $signed],
+                    [...$path, ...$steps],
                     [...$ancestors, $key],
                     $depth + 1,
-                    $multiplies || $relation->type === Relation::HAS_MANY,
+                    $many,
                     $access,
                     $model,
                     $relation,
