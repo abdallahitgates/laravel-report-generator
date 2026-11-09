@@ -14,7 +14,8 @@ use Illuminate\Contracts\Auth\Authenticatable;
  * always with the viewer's own access:
  *
  * - kpi:   totals of some of the report's numbers (one aggregate query);
- * - bar / line / share: the report's numbers per one of its columns,
+ * - bar / column / line / area / pie / donut / share: the report's numbers
+ *          per one of its columns,
  *          re-aggregated by the database (combined reports: in memory from
  *          the cached result);
  * - table: the report's first rows, as it sorts them.
@@ -24,7 +25,10 @@ use Illuminate\Contracts\Auth\Authenticatable;
  */
 final class WidgetData
 {
-    public const TYPES = ['kpi', 'bar', 'line', 'share', 'table'];
+    public const TYPES = ['kpi', 'bar', 'column', 'line', 'area', 'pie', 'donut', 'share', 'table'];
+
+    /** Types drawn in order along their column (time): sorted by it, more points allowed. */
+    public const ORDERED = ['line', 'area'];
 
     private const TIME_GRAINS = ['day', 'week', 'month', 'quarter', 'year', 'hour'];
 
@@ -40,12 +44,12 @@ final class WidgetData
     {
         $type = $widget['type'] ?? null;
         if (! in_array($type, self::TYPES, true)) {
-            throw new QueryException('INVALID_WIDGET', 'A widget is a kpi, bar, line, share or table.', 'type');
+            throw new QueryException('INVALID_WIDGET', 'A widget is a kpi, bar, column, line, area, pie, donut, share or table.', 'type');
         }
 
         $definition = ViewerChoices::apply($report->definition, $choices);
         $values = array_values(array_filter((array) ($widget['values'] ?? []), 'is_string'));
-        $top = max(1, min((int) ($widget['top'] ?? 10), $type === 'line' ? 400 : 50));
+        $top = max(1, min((int) ($widget['top'] ?? 10), in_array($type, self::ORDERED, true) ? 400 : 50));
 
         if ($type === 'table') {
             $result = $this->engine->rows($definition, [], $user, 0, $top);
@@ -127,7 +131,7 @@ final class WidgetData
         $timeLike = $category !== null && in_array($specs[$category]['grain'] ?? null, self::TIME_GRAINS, true);
         $derived['sort'] = match (true) {
             $category === null => [],
-            $type === 'line' || $timeLike => [['field' => $category, 'dir' => 'asc']],
+            in_array($type, self::ORDERED, true) || $timeLike => [['field' => $category, 'dir' => 'asc']],
             default => [['field' => $first, 'dir' => 'desc']],
         };
 
@@ -178,7 +182,7 @@ final class WidgetData
         }
 
         $first = $values[0];
-        usort($rows, $type === 'line'
+        usort($rows, in_array($type, self::ORDERED, true)
             ? fn ($a, $b) => strnatcasecmp((string) ($a[$category] ?? ''), (string) ($b[$category] ?? ''))
             : fn ($a, $b) => ($b[$first] ?? -INF) <=> ($a[$first] ?? -INF));
         $rows = array_slice($rows, 0, $type === 'kpi' ? 1 : $top);

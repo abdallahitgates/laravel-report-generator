@@ -10,8 +10,8 @@ use Illuminate\Support\Str;
 /**
  * A first dashboard for a report, from its columns: a KPI per main number,
  * a line chart over its time column (one number: one axis), a bar chart of
- * the top items of its first other column, the share of the second (a 100%
- * bar, not a pie), and the report's top rows.
+ * the top items of its first other column, a donut of the second, and the
+ * report's top rows. Any widget can be switched to another type later.
  * People then adjust it in the editor.
  */
 final class DashboardGenerator
@@ -58,7 +58,7 @@ final class DashboardGenerator
             $add(['type' => 'bar', 'title' => 'Top '.Str::plural(Str::lower($other[0]['label'])).' by '.Str::lower($numbers[0]['label']), 'category' => $other[0]['alias'], 'values' => [$main[0]], 'top' => 10, 'size' => isset($other[1]) ? 'md' : 'full']);
         }
         if ($main !== [] && isset($other[1])) {
-            $add(['type' => 'share', 'title' => 'Share of '.Str::lower($numbers[0]['label']).' by '.Str::lower($other[1]['label']), 'category' => $other[1]['alias'], 'values' => [$main[0]], 'top' => 6, 'size' => 'md']);
+            $add(['type' => 'donut', 'title' => $numbers[0]['label'].' by '.Str::lower($other[1]['label']), 'category' => $other[1]['alias'], 'values' => [$main[0]], 'top' => 6, 'size' => 'md']);
         }
         $add(['type' => 'table', 'title' => $report->name, 'top' => 10, 'size' => 'full']);
 

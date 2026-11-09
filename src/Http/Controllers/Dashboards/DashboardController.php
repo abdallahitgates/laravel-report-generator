@@ -15,9 +15,10 @@ use Illuminate\Routing\Controller;
 use Illuminate\Validation\Rule;
 
 /**
- * Dashboards: widgets over saved reports. Anyone who may open a dashboard
- * sees its widgets, each with their own data access (row scope); building
- * one needs access to the reports it uses.
+ * Dashboards: widgets over saved reports. Opening a dashboard shows its
+ * layout; each widget's data needs access to its own report (the report's
+ * owner, shares or permission), and rows follow the viewer's row scope.
+ * Building one needs access to the reports it uses.
  */
 class DashboardController extends Controller
 {
@@ -94,10 +95,30 @@ class DashboardController extends Controller
         abort_unless($this->access->canViewDashboard($dashboard, $request->user()), 403, 'You do not have access to this dashboard.');
         $spec = collect($dashboard->widgets())->firstWhere('id', $widget) ?? abort(404, 'This dashboard has no such widget.');
         $report = Report::query()->where('uuid', $spec['report'] ?? null)->first() ?? abort(404, 'The report behind this widget was deleted.');
+        if (! $this->access->canView($report, $request->user())) {
+            return new JsonResponse(['message' => "You do not have access to {$report->name}.", 'code' => 'REPORT_FORBIDDEN', 'details' => ['report' => $report->name]], 403);
+        }
 
-        // Opening the dashboard is enough: who it is published to was chosen
-        // with its reports. Rows still follow the viewer's own access.
         return new JsonResponse($this->widgets->compute($report, $spec, $this->choices($request, $dashboard), $request->user()));
+    }
+
+    /**
+     * Pins a widget to a dashboard the user owns (from a report: "Pin to
+     * dashboard"). Returns the dashboard.
+     */
+    public function pin(Request $request, Dashboard $dashboard): JsonResponse
+    {
+        abort_unless($this->access->canEditDashboard($dashboard, $request->user()), 403, 'Only the owner can change this dashboard.');
+        $widget = $this->validatedWidget($request);
+        $this->openReport($widget['report'], $request);
+
+        $layout = $dashboard->layout;
+        $widget['id'] = 'w'.substr(md5(uniqid('', true)), 0, 10);
+        $layout['widgets'] = [...($layout['widgets'] ?? []), $widget];
+        abort_if(count($layout['widgets']) > 40, 422, 'A dashboard holds up to 40 widgets.');
+        $dashboard->update(['layout' => $layout]);
+
+        return new JsonResponse(['data' => $this->full($dashboard->refresh(), $request)]);
     }
 
     /** A widget being edited (not saved yet). */
@@ -138,6 +159,23 @@ class DashboardController extends Controller
         foreach (collect($widgets)->pluck('report')->filter()->unique() as $uuid) {
             $this->openReport((string) $uuid, $request);
         }
+    }
+
+    private function validatedWidget(Request $request): array
+    {
+        $data = $request->validate([
+            'widget' => ['required', 'array'],
+            'widget.type' => ['required', Rule::in(WidgetData::TYPES)],
+            'widget.title' => ['sometimes', 'nullable', 'string', 'max:160'],
+            'widget.report' => ['required', 'string', 'max:64'],
+            'widget.category' => ['sometimes', 'nullable', 'string', 'max:64'],
+            'widget.values' => ['sometimes', 'array', 'max:6'],
+            'widget.values.*' => ['string', 'max:64'],
+            'widget.top' => ['sometimes', 'integer', 'min:1', 'max:400'],
+            'widget.size' => ['sometimes', Rule::in(['sm', 'md', 'lg', 'full'])],
+        ]);
+
+        return array_filter($data['widget'], fn ($v) => $v !== null);
     }
 
     private function validated(Request $request, bool $partial = false): array
@@ -197,12 +235,17 @@ class DashboardController extends Controller
 
     private function full(Dashboard $dashboard, Request $request): array
     {
-        $names = Report::query()->whereIn('uuid', collect($dashboard->widgets())->pluck('report')->filter()->unique())->pluck('name', 'uuid');
+        $reports = Report::query()->with('shares')->whereIn('uuid', collect($dashboard->widgets())->pluck('report')->filter()->unique())->get()->keyBy('uuid');
+        $user = $request->user();
 
         return $this->summary($dashboard, $request) + [
             'layout' => [
                 'context' => (object) ($dashboard->layout['context'] ?? []),
-                'widgets' => array_map(fn ($w) => $w + ['report_name' => $names[$w['report'] ?? ''] ?? null], $dashboard->widgets()),
+                'widgets' => array_map(fn ($w) => $w + [
+                    'report_name' => $reports[$w['report'] ?? '']?->name,
+                    // Whether this viewer may see the widget's data (access to its report).
+                    'can_view' => isset($reports[$w['report'] ?? '']) && $this->access->canView($reports[$w['report']], $user),
+                ], $dashboard->widgets()),
             ],
             'created_at' => $dashboard->created_at?->toIso8601String(),
         ];

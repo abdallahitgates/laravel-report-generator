@@ -43,7 +43,7 @@ it('proposes a dashboard from a report', function () {
     $layout = $this->actingAs($this->owner)->postJson('/api/report-generator/dashboards-generate', ['report' => $this->report['uuid']])->assertOk()->json('data');
 
     expect($layout['name'])->toBe('Visits per rep dashboard')
-        ->and(array_column($layout['widgets'], 'type'))->toBe(['kpi', 'kpi', 'kpi', 'kpi', 'line', 'line', 'bar', 'share', 'table'])
+        ->and(array_column($layout['widgets'], 'type'))->toBe(['kpi', 'kpi', 'kpi', 'kpi', 'line', 'line', 'bar', 'donut', 'table'])
         ->and($layout['widgets'][4])->toMatchArray(['category' => 'month', 'values' => ['visits']])
         ->and($layout['widgets'][5])->toMatchArray(['category' => 'month', 'values' => ['amount']])
         ->and($layout['widgets'][6])->toMatchArray(['category' => 'rep', 'values' => ['visits'], 'top' => 10])
@@ -93,6 +93,7 @@ it('saves dashboards for their owner and opens them for viewers', function () {
     $this->actingAs($this->other)->postJson("/api/report-generator/dashboards/{$uuid}/widgets/w1")->assertForbidden();
 
     $this->actingAs($this->owner)->patchJson("/api/report-generator/dashboards/{$uuid}", ['visibility' => 'public'])->assertOk();
+    $this->actingAs($this->owner)->putJson('/api/report-generator/reports/'.$this->report['uuid'].'/shares', ['visibility' => 'public', 'shares' => []])->assertOk();
     $this->actingAs($this->other)->postJson("/api/report-generator/dashboards/{$uuid}/widgets/w1")->assertOk()->assertJsonPath('rows.0.visits', 8);
     $this->actingAs($this->other)->postJson("/api/report-generator/dashboards/{$uuid}/widgets/nope")->assertNotFound();
     $this->actingAs($this->other)->patchJson("/api/report-generator/dashboards/{$uuid}", ['name' => 'Mine'])->assertForbidden();
@@ -103,7 +104,7 @@ it('saves dashboards for their owner and opens them for viewers', function () {
     expect(Dashboard::query()->count())->toBe(0);
 });
 
-it('publishes a dashboard to the holders of its permission, who see its widgets', function () {
+it('publishes a dashboard; each widget shows only to people who may open its report', function () {
     Gate::define('report-generator.report.publish', fn ($user) => (int) $user->id === 2);
     $this->app->bind(\Abdalla\ReportGenerator\Contracts\PermissionStore::class, fn () => new class implements \Abdalla\ReportGenerator\Contracts\PermissionStore {
         public function roles(): array { return [['id' => '1', 'name' => 'Reps']]; }
@@ -121,8 +122,13 @@ it('publishes a dashboard to the holders of its permission, who see its widgets'
     $this->actingAs($this->owner)->putJson("/api/report-generator/dashboards/{$uuid}/publish", ['permission' => 'see_visits_board', 'roles' => ['Reps'], 'in_menu' => true, 'menu_group' => 'Boards'])->assertOk();
     Gate::define('see_visits_board', fn ($user) => (int) $user->id === 3);
 
-    // The viewer cannot open the report itself, but the dashboard is enough for its widgets.
-    $this->actingAs($this->other)->getJson('/api/report-generator/reports/'.$this->report['uuid'].'/view')->assertForbidden();
+    // The viewer opens the dashboard but not the report behind its widget: the widget stays locked.
+    $this->actingAs($this->other)->getJson("/api/report-generator/dashboards/{$uuid}")->assertOk()->assertJsonPath('data.layout.widgets.0.can_view', false);
+    $this->actingAs($this->other)->postJson("/api/report-generator/dashboards/{$uuid}/widgets/k")->assertForbidden()->assertJsonPath('code', 'REPORT_FORBIDDEN');
+
+    // Once the report is shared with them, the widget shows, with their own data access.
+    $this->actingAs($this->owner)->putJson('/api/report-generator/reports/'.$this->report['uuid'].'/shares', ['shares' => [['type' => 'user', 'id' => '3']]])->assertOk();
+    $this->actingAs($this->other)->getJson("/api/report-generator/dashboards/{$uuid}")->assertJsonPath('data.layout.widgets.0.can_view', true);
     $this->actingAs($this->other)->postJson("/api/report-generator/dashboards/{$uuid}/widgets/k")->assertOk()->assertJsonPath('rows.0.visits', 8);
 
     $menu = $this->actingAs($this->other)->getJson('/api/report-generator/menu')->assertOk()->json('data');
@@ -137,5 +143,32 @@ it('refuses widgets on reports the builder cannot open', function () {
     $private = $this->actingAs($this->other)->postJson('/api/report-generator/reports', ['name' => 'Private', 'definition' => ['root' => 'visits', 'fields' => [['ref' => 'visits.__rows', 'agg' => 'count', 'as' => 'n']]]])->json('data.uuid');
 
     $this->actingAs($this->owner)->postJson('/api/report-generator/dashboards', ['name' => 'X', 'layout' => ['widgets' => [['id' => 'a', 'type' => 'kpi', 'report' => $private, 'values' => ['n']]]]])->assertForbidden();
-    $this->actingAs($this->owner)->postJson('/api/report-generator/dashboards', ['name' => 'X', 'layout' => ['widgets' => [['id' => 'a', 'type' => 'donut', 'report' => $private]]]])->assertStatus(422);
+    $this->actingAs($this->owner)->postJson('/api/report-generator/dashboards', ['name' => 'X', 'layout' => ['widgets' => [['id' => 'a', 'type' => 'radar', 'report' => $private]]]])->assertStatus(422);
+});
+
+it('draws the same data as columns, areas, pies and donuts', function () {
+    $bar = widget(['type' => 'bar', 'category' => 'speciality', 'values' => ['visits']])['rows'];
+    foreach (['column', 'pie', 'donut', 'share'] as $type) {
+        expect(widget(['type' => $type, 'category' => 'speciality', 'values' => ['visits']])['rows'])->toEqual($bar);
+    }
+    $area = widget(['type' => 'area', 'category' => 'month', 'values' => ['visits']]);
+    expect(array_column($area['rows'], 'visits'))->toBe([3, 2, 3]);
+    // Over a month column, columns keep the months in order too.
+    expect(array_column(widget(['type' => 'column', 'category' => 'month', 'values' => ['visits']])['rows'], 'visits'))->toBe([3, 2, 3]);
+});
+
+it('pins a widget from a report to a dashboard its owner chooses', function () {
+    $uuid = $this->actingAs($this->owner)->postJson('/api/report-generator/dashboards', ['name' => 'Board', 'layout' => ['widgets' => [
+        ['id' => 'k', 'type' => 'kpi', 'report' => $this->report['uuid'], 'values' => ['visits']],
+    ]]])->json('data.uuid');
+
+    $pinned = $this->actingAs($this->owner)->postJson("/api/report-generator/dashboards/{$uuid}/pin", ['widget' => [
+        'type' => 'pie', 'title' => 'Visits by speciality', 'report' => $this->report['uuid'], 'category' => 'speciality', 'values' => ['visits'], 'size' => 'md',
+    ]])->assertOk()->json('data.layout.widgets');
+    expect(array_column($pinned, 'type'))->toBe(['kpi', 'pie'])
+        ->and($pinned[1]['id'])->toStartWith('w')
+        ->and($pinned[1]['report_name'])->toBe('Visits per rep');
+
+    $this->actingAs($this->other)->postJson("/api/report-generator/dashboards/{$uuid}/pin", ['widget' => ['type' => 'kpi', 'report' => $this->report['uuid'], 'values' => ['visits']]])->assertForbidden();
+    $this->actingAs($this->owner)->postJson("/api/report-generator/dashboards/{$uuid}/pin", ['widget' => ['type' => 'radar', 'report' => $this->report['uuid']]])->assertStatus(422);
 });

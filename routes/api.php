@@ -59,6 +59,7 @@ Route::middleware('report-generator.can:createReports')->group(function () {
     Route::post('dashboards', [DashboardController::class, 'store'])->name('dashboards.store');
     Route::patch('dashboards/{dashboard}', [DashboardController::class, 'update'])->name('dashboards.update');
     Route::delete('dashboards/{dashboard}', [DashboardController::class, 'destroy'])->name('dashboards.destroy');
+    Route::post('dashboards/{dashboard}/pin', [DashboardController::class, 'pin'])->name('dashboards.pin');
     Route::post('dashboards-generate', [DashboardController::class, 'generate'])->name('dashboards.generate');
     Route::post('dashboards-preview', [DashboardController::class, 'preview'])->name('dashboards.preview');
 

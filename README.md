@@ -158,18 +158,20 @@ Widgets over saved reports, with shared report filters (period, lines, ...):
 | Widget | Data |
 |---|---|
 | `kpi` | totals of some of the report's numbers (averages included: one aggregate query) |
-| `bar` | the top `top` items of one of the report's columns by its first number |
-| `share` | how a total splits across one of the report's columns (a 100% bar; up to `top` parts) |
-| `line` | numbers over one of the report's columns (a month, a day), in order |
+| `bar`, `column` | the top `top` items of one of the report's columns by its first number (horizontal / vertical bars) |
+| `pie`, `donut`, `share` | how a total splits across one of the report's columns (up to `top` parts, the rest as "Other"; `share` is a 100% bar) |
+| `line`, `area` | numbers over one of the report's columns (a month, a day), in order |
 | `table` | the report's first `top` rows, optionally some columns only |
 
 Charts re-aggregate the report by the chosen column in the database (combined
 reports: in memory from the cached result, averages averaged rather than
 added up). `POST /dashboards-generate {report}` proposes a first layout
 from a report's columns. Dashboards publish like reports (a permission and
-roles, a menu entry; `/menu` lists both with a `type`). Whoever may open a
-dashboard sees its widgets with their own data access, even without access
-to the reports behind them.
+roles, a menu entry; `/menu` lists both with a `type`). A widget shows its
+data only to people who may open its report (owner, shares, the report's
+permission), with their own row scope; for others it is locked
+(`can_view: false`, `REPORT_FORBIDDEN`). `POST /dashboards/{uuid}/pin
+{widget}` adds a widget from a report to a dashboard you own.
 
 ## Report filters
 
