@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.10.0
+
+- Viewers filter a saved report by its columns: `filters: [{field, op,
+  value}]` on `/reports/{uuid}/rows`, `/summary` and `/export`, added to
+  the report's own filters (only its columns; they can only narrow it).
+- `/reports/{uuid}/view` gives each column's data `type`.
+- Dashboard widgets take `__count` (number of rows) as a value, so every
+  report, lists included, can feed a KPI or a chart.
+- Formulas: `PERCENT(a, b)` and `DAYS_BETWEEN(from, to)` (new
+  `Dialect::daysBetween()`).
+- Date fields allow `min` / `max` (earliest / latest), and the
+  "cannot use" message lists what a field really allows.
+
 ## 0.9.0
 
 - `Relation::through('accounts', 'Accounts', 'accountLinks', 'account')`:

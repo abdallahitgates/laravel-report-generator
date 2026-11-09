@@ -353,7 +353,9 @@ division and employee columns.
   report field (`"field": "visits"`) filters totals (HAVING).
 - **Formulas**: `+ - * / %`, comparisons, `AND OR NOT`, and `IF`, `NULLIF`,
   `COALESCE`, `ROUND`, `ABS`, `GREATEST`, `LEAST`, `LOWER`, `UPPER`, `CONCAT`,
-  `SAFE_DIVIDE`. Division never truncates and never fails on zero (it gives
+  `SAFE_DIVIDE`, `PERCENT(a, b)` (a × 100 / b) and `DAYS_BETWEEN(from, to)`
+  (whole days; works on MySQL, PostgreSQL and SQLite). Date fields can be
+  totalled as `min` / `max` (first / last visit). Division never truncates and never fails on zero (it gives
   an empty value). Formulas are parsed, never evaluated: only numbers and
   plain text literals reach SQL.
 
@@ -485,7 +487,7 @@ All paths are under the configured prefix (default `api/report-generator`).
 
 | GET | `/menu` | any user | Published reports in the menu the user may open, with their menu group |
 | GET | `/reports/{uuid}/view` | may open it | Name, saved report filters and parameters |
-| POST | `/reports/{uuid}/rows` | may open it | Run it: `context` (period, lines, divisions, employees), `parameters`, `page`, `groups` |
+| POST | `/reports/{uuid}/rows` | may open it | Run it: `context` (period, lines, divisions, employees), `parameters`, `page`, `groups`, `sort` (up to 5 levels), `filters` (`[{field, op, value}]` on the report's own columns, AND-ed with its saved filters; also for `/summary` and `/export`) |
 | POST | `/reports/{uuid}/values` | may open it | Filter values for the report's own fields |
 | POST | `/reports/{uuid}/summary` | may open it | Row count and grand totals of the whole report (same body as `/rows`) |
 | POST | `/reports/{uuid}/export` | may open it + export | The whole report as `format` `csv` or `xlsx`, streamed |
