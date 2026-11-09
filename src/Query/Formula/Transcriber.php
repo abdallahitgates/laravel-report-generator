@@ -16,7 +16,7 @@ final class Transcriber
     public const FUNCTIONS = [
         'IF' => [3, 3], 'NULLIF' => [2, 2], 'COALESCE' => [1, null], 'ROUND' => [1, 2], 'ABS' => [1, 1],
         'GREATEST' => [2, null], 'LEAST' => [2, null], 'LOWER' => [1, 1], 'UPPER' => [1, 1],
-        'CONCAT' => [2, null], 'SAFE_DIVIDE' => [2, 2],
+        'CONCAT' => [2, null], 'SAFE_DIVIDE' => [2, 2], 'PERCENT' => [2, 2], 'DAYS_BETWEEN' => [2, 2],
     ];
 
     /** @param  Closure(string): string  $resolve  field name -> SQL expression */
@@ -73,6 +73,8 @@ final class Transcriber
         return match ($name) {
             'IF' => "(CASE WHEN {$args[0]} THEN {$args[1]} ELSE {$args[2]} END)",
             'SAFE_DIVIDE' => "({$args[0]} * 1.0 / NULLIF({$args[1]}, 0))",
+            'PERCENT' => "({$args[0]} * 100.0 / NULLIF({$args[1]}, 0))",
+            'DAYS_BETWEEN' => '('.$this->dialect->daysBetween($args[0], $args[1]).')',
             'CONCAT' => $this->dialect->concat($args),
             'GREATEST', 'LEAST' => $this->dialect->greatestLeast($name, $args),
             'ROUND' => count($args) === 2 ? "ROUND({$args[0]}, {$args[1]})" : "ROUND({$args[0]})",

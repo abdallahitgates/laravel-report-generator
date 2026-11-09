@@ -105,7 +105,24 @@ final class Evaluator
             'UPPER' => $args[0] === null ? null : mb_strtoupper((string) $args[0]),
             'CONCAT' => implode('', array_map(fn ($a) => (string) $a, $args)),
             'SAFE_DIVIDE' => $args[0] === null || $args[1] === null || $this->number($args[1]) == 0 ? null : $this->number($args[0]) / $this->number($args[1]),
+            'PERCENT' => $args[0] === null || $args[1] === null || $this->number($args[1]) == 0 ? null : $this->number($args[0]) * 100 / $this->number($args[1]),
+            'DAYS_BETWEEN' => $this->days($args[0], $args[1]),
         };
+    }
+
+    private function days(mixed $from, mixed $to): ?int
+    {
+        if ($from === null || $to === null || $from === '' || $to === '') {
+            return null;
+        }
+        try {
+            $a = new \DateTimeImmutable(substr((string) $from, 0, 10));
+            $b = new \DateTimeImmutable(substr((string) $to, 0, 10));
+        } catch (\Exception) {
+            return null;
+        }
+
+        return (int) $a->diff($b)->format('%r%a');
     }
 
     private function number(mixed $value): int|float

@@ -172,3 +172,46 @@ it('pins a widget from a report to a dashboard its owner chooses', function () {
     $this->actingAs($this->other)->postJson("/api/report-generator/dashboards/{$uuid}/pin", ['widget' => ['type' => 'kpi', 'report' => $this->report['uuid'], 'values' => ['visits']]])->assertForbidden();
     $this->actingAs($this->owner)->postJson("/api/report-generator/dashboards/{$uuid}/pin", ['widget' => ['type' => 'radar', 'report' => $this->report['uuid']]])->assertStatus(422);
 });
+
+it('offers the number of rows to widgets, also on reports without totals', function () {
+    expect(widget(['type' => 'kpi', 'values' => ['__count']])['rows'][0]['__count'])->toBe(8);
+
+    $detail = $this->actingAs($this->owner)->postJson('/api/report-generator/reports', ['name' => 'Visit list', 'definition' => [
+        'root' => 'visits',
+        'fields' => [
+            ['ref' => 'users.name', 'as' => 'rep'],
+            ['ref' => 'specialities.name', 'as' => 'speciality'],
+            ['ref' => 'visits.duration_min', 'as' => 'minutes'],
+        ],
+    ]])->assertCreated()->json('data');
+    $preview = fn (array $w) => $this->actingAs($this->owner)->postJson('/api/report-generator/dashboards-preview', ['widget' => $w + ['report' => $detail['uuid']]])->assertOk()->json();
+
+    $bar = $preview(['type' => 'bar', 'category' => 'speciality', 'values' => ['__count', 'minutes']]);
+    expect($bar['rows'][0])->toMatchArray(['speciality' => 'Cardio', '__count' => 6])
+        ->and(collect($bar['columns'])->firstWhere('alias', '__count')['label'])->toBe('Number of rows');
+
+    // The view tells pickers which columns hold numbers.
+    $view = $this->actingAs($this->owner)->getJson("/api/report-generator/reports/{$detail['uuid']}/view")->assertOk()->json('data.fields');
+    expect(array_column($view, 'type', 'as'))->toBe(['rep' => 'string', 'speciality' => 'string', 'minutes' => 'integer']);
+    $types = array_column($this->actingAs($this->owner)->getJson("/api/report-generator/reports/{$this->report['uuid']}/view")->json('data.fields'), 'type', 'as');
+    expect($types)->toMatchArray(['month' => 'date', 'visits' => 'integer', 'amount' => 'decimal', 'per_visit' => 'decimal']);
+});
+
+it('lets viewers filter and sort a saved report by its columns', function () {
+    $uuid = $this->report['uuid'];
+    $run = fn (array $choices) => $this->actingAs($this->owner)->postJson("/api/report-generator/reports/{$uuid}/rows", $choices)->assertOk()->json('rows');
+    $total = fn (array $rows) => array_sum(array_column($rows, 'visits'));
+
+    expect($total($run([])))->toBe(8)
+        ->and($total($run(['filters' => [['field' => 'speciality', 'op' => '=', 'value' => 'GP']]])))->toBe(2)
+        ->and($total($run(['filters' => [['field' => 'speciality', 'op' => 'contains', 'value' => 'ard'], ['field' => 'visits', 'op' => '>=', 'value' => 2]]])))
+            ->toBe(array_sum(array_filter(array_column(array_filter($run([]), fn ($r) => $r['speciality'] === 'Cardio'), 'visits'), fn ($v) => $v >= 2)));
+
+    // Only the report's own columns; anything else is ignored.
+    expect($total($run(['filters' => [['field' => 'users.id', 'op' => '=', 'value' => 999]]])))->toBe(8);
+
+    $this->actingAs($this->owner)->postJson("/api/report-generator/reports/{$uuid}/rows", ['filters' => [['field' => 'speciality', 'op' => 'explode', 'value' => 1]]])->assertStatus(422);
+
+    $sorted = $run(['sort' => [['field' => 'speciality', 'dir' => 'desc'], ['field' => 'visits', 'dir' => 'desc']]]);
+    expect($sorted[0]['speciality'])->toBe('GP');
+});

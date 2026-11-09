@@ -5,6 +5,8 @@ namespace Abdalla\ReportGenerator\Http\Controllers\Reports;
 use Abdalla\ReportGenerator\Models\Report;
 use Abdalla\ReportGenerator\Query\QueryEngine;
 use Abdalla\ReportGenerator\Security\ReportAccess;
+use Abdalla\ReportGenerator\Semantic\Published\SemanticModel;
+use Abdalla\ReportGenerator\Semantic\Published\SemanticModelRepository;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
@@ -21,6 +23,7 @@ class RunController extends Controller
     public function __construct(
         private readonly ReportAccess $access,
         private readonly QueryEngine $engine,
+        private readonly SemanticModelRepository $models,
     ) {
     }
 
@@ -28,6 +31,7 @@ class RunController extends Controller
     {
         $this->authorizeView($report, $request);
         $definition = $report->definition;
+        $model = $this->models->current($request->user());
 
         return new JsonResponse(['data' => [
             'uuid' => $report->uuid,
@@ -44,6 +48,7 @@ class RunController extends Controller
                 'label' => $f['label'] ?? null,
                 'kind' => isset($f['agg']) || isset($f['formula']) || isset($f['report']) ? 'value' : 'dimension',
                 'grain' => $f['grain'] ?? null,
+                'type' => self::typeOf($f, $model),
             ], fn ($v) => $v !== null), $definition['fields'] ?? []),
             'sort' => $definition['sort'] ?? [],
             'grouped' => (bool) ($definition['ui']['grouped'] ?? false),
@@ -93,6 +98,33 @@ class RunController extends Controller
         ));
     }
 
+    /** A saved column's data type, for pickers and filters (null when unknown). */
+    private static function typeOf(array $field, SemanticModel $model): ?string
+    {
+        if (isset($field['formula'])) {
+            return 'decimal';
+        }
+        if (isset($field['report'])) {
+            return null;
+        }
+        $agg = $field['agg'] ?? null;
+        if (in_array($agg, ['count', 'count_distinct'], true)) {
+            return 'integer';
+        }
+        if (in_array($agg, ['sum', 'avg'], true)) {
+            return 'decimal';
+        }
+        if (isset($field['grain']) && $field['grain'] !== null) {
+            return 'date';
+        }
+        [$dataset, $key] = array_pad(explode('.', (string) ($field['ref'] ?? ''), 2), 2, null);
+        if ($key === '__rows') {
+            return 'integer';
+        }
+
+        return $dataset && $key ? ($model->dataset($dataset)?->fields[$key] ?? null)?->type->value : null;
+    }
+
     /**
      * The saved definition with what the viewer picked: report filters
      * (period, lines, divisions, employees) replace the saved ones, and the
@@ -109,6 +141,11 @@ class RunController extends Controller
             'sort' => ['sometimes', 'array', 'max:5'],
             'sort.*.field' => ['required', 'string', 'max:64'],
             'sort.*.dir' => ['required', 'in:asc,desc'],
+            // The viewer's own filters on the report's columns, added to the saved ones.
+            'filters' => ['sometimes', 'array', 'max:20'],
+            'filters.*.field' => ['required', 'string', 'max:64'],
+            'filters.*.op' => ['required', 'string', 'max:20'],
+            'filters.*.value' => ['sometimes', 'nullable'],
         ]);
 
         return \Abdalla\ReportGenerator\Dashboards\ViewerChoices::apply($definition, $data);

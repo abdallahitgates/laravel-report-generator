@@ -38,6 +38,11 @@ final class SqliteDialect implements Dialect
         return $value ? 1 : 0;
     }
 
+    public function daysBetween(string $from, string $to): string
+    {
+        return "CAST(julianday(date({$to})) - julianday(date({$from})) AS INTEGER)";
+    }
+
     public function concat(array $parts): string
     {
         return '('.implode(' || ', array_map(fn ($p) => "COALESCE({$p}, '')", $parts)).')';

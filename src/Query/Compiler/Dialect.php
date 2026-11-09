@@ -29,6 +29,9 @@ interface Dialect
     /** Case-insensitive LIKE keyword. */
     public function likeOperator(): string;
 
+    /** Whole days from one date to another (negative when `to` is earlier). */
+    public function daysBetween(string $from, string $to): string;
+
     public function supportsRollup(): bool;
 
     /** @param  list<string>  $expressions */

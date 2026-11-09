@@ -95,7 +95,7 @@ final class QueryPlanner
 
         if ($spec->aggregation !== null) {
             if (! $field->allows($spec->aggregation)) {
-                $allowed = implode(', ', array_map(fn (Aggregation $a) => $a->value, Aggregation::forType($field->type)));
+                $allowed = implode(', ', array_unique(array_map(fn (Aggregation $a) => $a->value, [...$field->aggregations, Aggregation::Count, Aggregation::CountDistinct])));
                 throw new QueryException('INVALID_AGGREGATION', "{$field->label} cannot use {$spec->aggregation->value}. It allows: {$allowed}.", "{$at}.agg");
             }
 

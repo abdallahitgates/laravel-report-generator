@@ -30,6 +30,9 @@ final class WidgetData
     /** Types drawn in order along their column (time): sorted by it, more points allowed. */
     public const ORDERED = ['line', 'area'];
 
+    /** Value alias for the report's row count. */
+    public const ROW_COUNT = '__count';
+
     private const TIME_GRAINS = ['day', 'week', 'month', 'quarter', 'year', 'hour'];
 
     public function __construct(private readonly QueryEngine $engine)
@@ -83,6 +86,10 @@ final class WidgetData
             if (isset($field['as'])) {
                 $specs[$field['as']] = $field;
             }
+        }
+        // "Number of rows": always on offer, also for reports without totals.
+        if (in_array(self::ROW_COUNT, $values, true) && ! isset($specs[self::ROW_COUNT]) && isset($definition['root'])) {
+            $specs[self::ROW_COUNT] = ['ref' => $definition['root'].'.__rows', 'agg' => 'count', 'as' => self::ROW_COUNT, 'label' => 'Number of rows'];
         }
         foreach ([$category, ...$values] as $alias) {
             if ($alias !== null && ! isset($specs[$alias])) {
@@ -148,6 +155,7 @@ final class WidgetData
     {
         $stream = $this->engine->stream($definition, [], $user);
         $columns = array_column($stream['columns'], null, 'alias');
+        $columns[self::ROW_COUNT] = ['alias' => self::ROW_COUNT, 'label' => 'Number of rows', 'type' => 'integer', 'kind' => 'measure', 'total' => 'sum'];
         foreach ([$category, ...$values] as $alias) {
             if ($alias !== null && ! isset($columns[$alias])) {
                 throw new QueryException('UNKNOWN_FIELD', "The report has no column \"{$alias}\".", 'values');
@@ -159,7 +167,9 @@ final class WidgetData
             $key = $category === null ? '' : (string) ($row[$category] ?? '');
             $groups[$key] ??= ['label' => $category === null ? null : ($row[$category] ?? null), 'values' => []];
             foreach ($values as $alias) {
-                if (is_numeric($row[$alias] ?? null)) {
+                if ($alias === self::ROW_COUNT) {
+                    $groups[$key]['values'][$alias][] = 1;
+                } elseif (is_numeric($row[$alias] ?? null)) {
                     $groups[$key]['values'][$alias][] = $row[$alias] + 0;
                 }
             }

@@ -181,6 +181,30 @@ it('evaluates formulas and filters on totals', function (string $connection) {
         ->and(keyed($result, 'rep', 'load'))->toBe(['Ali' => 'busy', 'Omar' => 'busy']);
 })->with(dataConnections());
 
+it('works out percentages and days between dates', function (string $connection) {
+    $engine = engineFor($connection);
+
+    $result = runReport($engine, [
+        'root' => 'visits',
+        'fields' => [
+            ['ref' => 'users.name', 'as' => 'rep'],
+            ['ref' => 'visits.__rows', 'agg' => 'count', 'as' => 'visits'],
+            ['ref' => 'visits.visit_date', 'agg' => 'min', 'as' => 'first'],
+            ['ref' => 'visits.visit_date', 'agg' => 'max', 'as' => 'last'],
+            ['formula' => 'PERCENT(visits, 8)', 'as' => 'share'],
+            ['formula' => 'DAYS_BETWEEN(first, last)', 'as' => 'span'],
+        ],
+        'sort' => [['field' => 'rep', 'dir' => 'asc']],
+    ]);
+
+    foreach ($result['rows'] as $row) {
+        $days = (int) (new DateTimeImmutable(substr((string) $row['first'], 0, 10)))->diff(new DateTimeImmutable(substr((string) $row['last'], 0, 10)))->format('%r%a');
+        expect(round((float) $row['share'], 2))->toBe(round($row['visits'] * 100 / 8, 2))
+            ->and((int) $row['span'])->toBe($days);
+    }
+    expect(array_sum(array_map(fn ($r) => (float) $r['share'], $result['rows'])))->toEqualWithDelta(100.0, 0.01);
+})->with(dataConnections());
+
 it('applies every filter operator', function (string $connection) {
     $engine = engineFor($connection);
     $count = function (array $condition) use ($engine) {

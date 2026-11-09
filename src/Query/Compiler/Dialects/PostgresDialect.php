@@ -33,6 +33,11 @@ final class PostgresDialect implements Dialect
         return $value ? 'true' : 'false';
     }
 
+    public function daysBetween(string $from, string $to): string
+    {
+        return "(CAST({$to} AS DATE) - CAST({$from} AS DATE))";
+    }
+
     public function concat(array $parts): string
     {
         return 'CONCAT('.implode(', ', $parts).')';

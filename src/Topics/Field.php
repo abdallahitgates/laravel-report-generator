@@ -220,7 +220,12 @@ final class Field
             return $this->aggregations;
         }
 
-        return $this->role === FieldRole::Measure ? Aggregation::forType($this->type) : [];
+        if ($this->role === FieldRole::Measure) {
+            return Aggregation::forType($this->type);
+        }
+
+        // Earliest / latest date (a doctor's last visit) is always meaningful.
+        return $this->type->isTemporal() ? [Aggregation::Min, Aggregation::Max] : [];
     }
 
     /** @param  Closure(?Authenticatable): list<string>  $rolesOf */

@@ -37,6 +37,11 @@ final class MySqlDialect implements Dialect
         return $value ? 1 : 0;
     }
 
+    public function daysBetween(string $from, string $to): string
+    {
+        return "DATEDIFF({$to}, {$from})";
+    }
+
     public function concat(array $parts): string
     {
         return 'CONCAT('.implode(', ', $parts).')';
