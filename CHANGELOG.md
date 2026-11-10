@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.11.0
+
+- Dashboard widgets on reports that filter on their totals (`visits >= 80`)
+  no longer fail with "a GROUP BY clause is required before HAVING": they
+  are built from the rows the report keeps, so they match it exactly.
+- Pie, donut and share widgets get every category (up to 500), so "Other"
+  holds the rest and the total is the report's total; `top` is how many
+  parts get their own colour.
+- README: what it does, screenshots, install from the public repository,
+  and the example app (`report-generator-demo`) with its walkthrough video.
+
 ## 0.10.0
 
 - Viewers filter a saved report by its columns: `filters: [{field, op,

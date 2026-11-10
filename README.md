@@ -1,46 +1,80 @@
 # abdalla/laravel-report-generator
 
-A report engine for Laravel. Describe what people may report on as **topics**
-(PHP classes: fields with labels, relations to other topics, and the
-employee / division / line / date columns every report is filtered by), and
-users build reports (joins, filters, grouping, formulas, exports) without
-writing SQL. Built for large
-datasets: work is pushed down to the database, previews are paged on the
-server, and exports stream with constant memory.
+A report engine for Laravel. You describe what people may report on as
+**topics** (PHP classes: fields with labels, relations to other topics, and the
+employee / line / date columns reports are filtered by); your users then build
+reports, formulas and dashboards on that data **without writing SQL**, and
+every row they see follows your own access rules.
 
 The UI ships separately as [`@abdalla/report-generator-vue`](https://github.com/abdallahitgates/report-generator-vue).
+A complete example app (Laravel 11 + Vue, SQLite, a year of pharma field-force
+data) lives in [`report-generator-demo`](#example-app).
 
-> Version **0.8.0** (v2 phase P6). Topics defined in code replace the
-> database scan and Model Studio of 0.1. The query engine, saved reports and
-> the builder UI are unchanged.
+**Watch the 2½-minute walkthrough:** `docs/report-generator-demo.mp4` in the
+example app (recorded from it by `tools/record-video.mjs`).
+
+![Report builder: the relation tree on the left, rows / values / filters, live results](docs/screenshots/builder.png)
+
+## What it does
+
+| | |
+|---|---|
+| **Build** | Pick a topic, drag fields from its relation tree (Visits ▸ Doctor ▸ Speciality): every join is declared once in code, never guessed. Rows, values (sum, average, count, distinct, min, max, earliest / latest date), grouping by day / week / month / quarter / year, subtotals and grand totals that stay right across one-to-many joins. |
+| **Formulas** | Written with column names (`[Amount] / [Number of visits]`), or from quick formulas (A per B, % of, difference, change %, days between dates, High / Low). `IF`, `SAFE_DIVIDE`, `PERCENT`, `ROUND`, `DAYS_BETWEEN`, … compiled to SQL, never evaluated as code. |
+| **Explore** | A spreadsheet-like grid over millions of rows (paged on the server): sort by several columns, filter any column from its menu, select cells for their sum / average / min / max, copy to Excel, freeze, hide and reorder columns. |
+| **Export** | Excel and CSV of every row, streamed with constant memory. |
+| **Dashboards** | KPI, bar, column, line, area, pie, donut, share bar and table widgets from saved reports; resize, reorder, a shared period filter; pin a chart from any report. |
+| **Share** | Share with people or roles, or publish to roles with a permission and a sidebar menu entry. |
+| **Security** | Row scope per user (a rep sees their own rows, a manager their line), per-field roles, read-only connection, timeouts, row and concurrency limits. |
+| **Combine** | Put columns of existing code-computed reports side by side per employee or division. |
+
+![A dashboard: bar, KPI and donut widgets over one saved report](docs/screenshots/dashboard.png)
 
 ## Requirements
 
-PHP 8.1+, Laravel 10 (10.48+), 11 or 12. Data sources: MySQL 5.7+/8, MariaDB
-and PostgreSQL (bulk inspectors, a handful of catalog queries for the whole
-schema); other Laravel drivers work through a slower generic inspector.
+PHP 8.1+, Laravel 10 (10.48+), 11 or 12. Databases: MySQL 5.7+ / 8, MariaDB,
+PostgreSQL and SQLite.
 
 ## Install
 
-The package is installed from its GitHub repository. Add the repository to
-your project's `composer.json` once:
-
-```json
-"repositories": [
-    { "type": "vcs", "url": "https://github.com/abdallahitgates/laravel-report-generator" }
-]
-```
-
-then:
-
 ```bash
-composer require abdalla/laravel-report-generator:^0.1
+composer config repositories.report-generator vcs https://github.com/abdallahitgates/laravel-report-generator
+composer require abdalla/laravel-report-generator:^0.10
 php artisan report-generator:install --migrate
 ```
 
-While the repository is private, give Composer a read-only GitHub token once
-per machine: `composer config --global github-oauth.github.com <token>`
-(on servers and CI, use the `COMPOSER_AUTH` environment variable instead).
+```bash
+npm install "git+https://github.com/abdallahitgates/report-generator-vue.git#v0.10.0"
+```
+
+Then: describe your [topics](#topics), grant the [abilities](#hook-it-into-your-app)
+and mount the Vue screens (see the Vue package's README).
+
+## Example app
+
+[`report-generator-demo`](https://github.com/abdallahitgates/report-generator-demo)
+is a working app to try everything and to copy from:
+
+```bash
+git clone https://github.com/abdallahitgates/report-generator-demo && cd report-generator-demo
+composer install && npm install
+cp .env.example .env && php artisan key:generate
+touch database/database.sqlite && php artisan migrate --seed
+npm run build && php artisan serve
+```
+
+Open http://127.0.0.1:8000: you are signed in as the admin. The "Signed in as"
+menu switches to a manager or a rep to see the row scope at work.
+
+| Where | What to look at |
+|---|---|
+| `app/Reporting/Topics/` | 11 topics: visits, sales, doctors, accounts, a link table with a `through` relation, lookups |
+| `app/Reporting/FieldForceScope.php` | Row security: reps see their own rows, managers their line |
+| `app/Providers/AppServiceProvider.php` | Abilities (Gate) and the scope |
+| `resources/js/routes.js` | The Vue screens wired to a router |
+| `tools/record-video.mjs` | Records the walkthrough video (Playwright) |
+
+![Every column has a menu: sort, add a sort level, filter rows or totals, hide](docs/screenshots/viewer-column-menu.png)
 
 ## Configure
 
