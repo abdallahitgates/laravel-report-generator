@@ -215,3 +215,37 @@ it('lets viewers filter and sort a saved report by its columns', function () {
     $sorted = $run(['sort' => [['field' => 'speciality', 'dir' => 'desc'], ['field' => 'visits', 'dir' => 'desc']]]);
     expect($sorted[0]['speciality'])->toBe('GP');
 });
+
+it('charts reports that filter on their totals from the rows the report keeps', function () {
+    $filtered = $this->actingAs($this->owner)->postJson('/api/report-generator/reports', ['name' => 'Busy reps', 'definition' => [
+        'root' => 'visits',
+        'fields' => [
+            ['ref' => 'users.name', 'as' => 'rep'],
+            ['ref' => 'visits.__rows', 'agg' => 'count', 'as' => 'visits'],
+            ['ref' => 'visits.amount', 'agg' => 'sum', 'as' => 'amount'],
+        ],
+        'filters' => ['and' => [['field' => 'visits', 'op' => '>=', 'value' => 3]]],
+    ]])->assertCreated()->json('data');
+    $preview = fn (array $w) => $this->actingAs($this->owner)->postJson('/api/report-generator/dashboards-preview', ['widget' => $w + ['report' => $filtered['uuid']]])->assertOk()->json();
+
+    // The report's own rows: only reps with at least 3 visits.
+    $rows = $this->actingAs($this->owner)->postJson("/api/report-generator/reports/{$filtered['uuid']}/rows", [])->json('rows');
+    $kept = array_filter($rows, fn ($r) => $r['visits'] >= 3);
+    expect($rows)->toHaveCount(count($kept))->not->toBeEmpty();
+
+    $kpi = $preview(['type' => 'kpi', 'values' => ['visits', '__count']]);
+    expect($kpi['rows'][0]['visits'])->toBe(array_sum(array_column($rows, 'visits')))
+        ->and($kpi['rows'][0]['__count'])->toBe(count($rows));
+
+    $bar = $preview(['type' => 'bar', 'category' => 'rep', 'values' => ['amount']]);
+    expect(array_column($bar['rows'], 'rep'))->toEqualCanonicalizing(array_column($rows, 'rep'));
+});
+
+it('sends every part to pie, donut and share widgets, so "Other" and the total are right', function () {
+    $donut = widget(['type' => 'donut', 'category' => 'rep', 'values' => ['visits'], 'top' => 1]);
+    $bar = widget(['type' => 'bar', 'category' => 'rep', 'values' => ['visits'], 'top' => 1]);
+
+    expect($bar['rows'])->toHaveCount(1)
+        ->and(count($donut['rows']))->toBeGreaterThan(1)
+        ->and(array_sum(array_column($donut['rows'], 'visits')))->toBe(8);
+});

@@ -30,6 +30,11 @@ final class WidgetData
     /** Types drawn in order along their column (time): sorted by it, more points allowed. */
     public const ORDERED = ['line', 'area'];
 
+    /** Types that show parts of a whole (the rest folded into "Other"). */
+    public const PARTS = ['pie', 'donut', 'share'];
+
+    private const MAX_PARTS_ROWS = 500;
+
     /** Value alias for the report's row count. */
     public const ROW_COUNT = '__count';
 
@@ -53,6 +58,12 @@ final class WidgetData
         $definition = ViewerChoices::apply($report->definition, $choices);
         $values = array_values(array_filter((array) ($widget['values'] ?? []), 'is_string'));
         $top = max(1, min((int) ($widget['top'] ?? 10), in_array($type, self::ORDERED, true) ? 400 : 50));
+        // Parts of a whole: every category comes back, so the chart's "Other"
+        // holds the rest and the total is the report's total. `top` is how
+        // many parts get their own colour, which the chart decides.
+        if (in_array($type, self::PARTS, true)) {
+            $top = self::MAX_PARTS_ROWS;
+        }
 
         if ($type === 'table') {
             $result = $this->engine->rows($definition, [], $user, 0, $top);
@@ -73,7 +84,10 @@ final class WidgetData
             throw new QueryException('INVALID_WIDGET', 'Pick the column to chart by.', 'category');
         }
 
-        return Combiner::isCombined($definition)
+        // Combined reports, and reports that filter on their totals (HAVING:
+        // "visits >= 80"), are charted from their own rows, so the widget
+        // shows exactly what the report keeps.
+        return Combiner::isCombined($definition) || $this->filterAliases($definition['filters'] ?? []) !== []
             ? $this->combined($type, $definition, $category, $values, $top, $user)
             : $this->topic($type, $definition, $category, $values, $top, $user);
     }
@@ -150,7 +164,7 @@ final class WidgetData
         return ['type' => $type, 'columns' => $columns, 'rows' => $rows, 'meta' => $result['meta'] + ['category' => $category, 'values' => $values]];
     }
 
-    /** Combined reports: aggregate the cached rows per category in memory. */
+    /** From the report's own rows (combined reports, totals filters): aggregated per category in memory. */
     private function combined(string $type, array $definition, ?string $category, array $values, int $top, ?Authenticatable $user): array
     {
         $stream = $this->engine->stream($definition, [], $user);
